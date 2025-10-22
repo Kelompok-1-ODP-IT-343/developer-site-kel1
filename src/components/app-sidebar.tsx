@@ -14,16 +14,12 @@ import {
 import {
   Home,
   CheckSquare,
-  FilePlus2,
-  Users,
-  Building2,
-  FolderKanban,
+  ListTodo,
   ChevronDown,
   Bell,
   HelpCircle,
   LogOut,
-  Settings,
-  Building
+  Settings
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -40,12 +36,7 @@ import {
 const menuItems = [
   { name: "Home", icon: Home },
   { name: "Approval KPR", icon: CheckSquare },
-  { name: "Approval Properties", icon: Building },
-  { name: "Customer List", icon: Users },
-  { name: "Developer List", icon: Building2 },
-  { name: "Properties List", icon: FolderKanban },
-  { name: "Add Properties", icon: FilePlus2 },
-
+  { name: "Approval History", icon: ListTodo }
 ]
 
 export function AppSidebar({ activeMenu, onSelect, onLogout }: any) {
