@@ -39,7 +39,15 @@ const menuItems = [
   { name: "Approval History", icon: ListTodo }
 ]
 
-export function AppSidebar({ activeMenu, onSelect, onLogout }: any) {
+import { logout } from "@/services/auth"
+
+interface AppSidebarProps {
+  activeMenu: string;
+  onSelect: (menu: string) => void;
+  onLogout?: () => void;
+}
+
+export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) {
   const router = useRouter()
 
   return (
@@ -154,7 +162,23 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: any) {
 
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={onLogout}
+              onClick={async () => {
+                try {
+                  const result = await logout();
+                  if (result.success) {
+                    if (onLogout) {
+                      onLogout();
+                    } else {
+                      router.push('/login');
+                    }
+                  } else {
+                    console.error('Logout failed:', result.message);
+                  }
+                } catch (error) {
+                  console.error('Logout error:', error);
+                  router.push('/login');
+                }
+              }}
               className="text-red-500 focus:text-red-500"
             >
               <LogOut className="mr-2 h-4 w-4" /> Log out

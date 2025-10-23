@@ -1,4 +1,6 @@
-"use client"
+'use client';
+
+import RoleGuard from '@/components/RoleGuard';
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
@@ -12,10 +14,7 @@ import { ModeToggle } from "@/components/mode-toggle" // 🌙 import toggle
 
 import AnalyticsDashboard from "@/components/AnalyticsDashboard"
 import ChartsSection from "@/components/ChartsSection"
-import AddProperties  from "@/components/AddProperties"
 import ApprovalSection from "@/components/ApprovalSection"
-import CustomerInfo from "@/components/CustomerInfo"
-import ApprovalProperties from "@/components/ApprovalProperties"
 import ApprovalHistory from "@/components/ApprovalHistory"
 
 export default function Dashboard() {
@@ -41,29 +40,31 @@ export default function Dashboard() {
   }
 
   return (
-    <SidebarProvider>
-      <AppSidebar
-        activeMenu={activeMenu}
-        onSelect={setActiveMenu}
-        onLogout={() => router.push("/login")}
-      />
-      <SidebarInset>
-        <main className="flex-1 p-8">
-          {/* HEADER */}
-          <header className="flex justify-between items-center mb-8 text-gray-600 dark:text-gray-300">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger />
-              <span className="font-medium">Friday | 3 October 2025 | 12:00:00</span>
-            </div>
+    <RoleGuard allowedRoles={['DEVELOPER']}>
+      <SidebarProvider>
+        <AppSidebar
+          activeMenu={activeMenu}
+          onSelect={setActiveMenu}
+          onLogout={() => router.push("/login")}
+        />
+        <SidebarInset>
+          <main className="flex-1 p-8">
+            {/* HEADER */}
+            <header className="flex justify-between items-center mb-8 text-gray-600 dark:text-gray-300">
+              <div className="flex items-center gap-3">
+                <SidebarTrigger />
+                <span className="font-medium">Friday | 3 October 2025 | 12:00:00</span>
+              </div>
 
-            {/* 🌙 TOGGLE BUTTON */}
-            <ModeToggle />
-          </header>
+              {/* 🌙 TOGGLE BUTTON */}
+              <ModeToggle />
+            </header>
 
-          {/* DYNAMIC CONTENT */}
-          {renderContent()}
-        </main>
-      </SidebarInset>
-    </SidebarProvider>
+            {/* DYNAMIC CONTENT */}
+            {renderContent()}
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </RoleGuard>
   )
 }
