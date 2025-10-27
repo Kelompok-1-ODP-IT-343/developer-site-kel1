@@ -40,6 +40,7 @@ import {
   OctagonAlert,
   BellDot
 } from "lucide-react";
+import { getUserProfile } from "@/lib/coreApi";
 
 const COLORS = {
   teal: "#3FD8D4",
@@ -47,12 +48,39 @@ const COLORS = {
   orange: "#FF8500",
   lime: "#DDEE59",
 };
+
+interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  roleName: string;
+  status: string;
+  monthlyIncome: number;
+  occupation?: string;
+  companyName?: string;
+  nik?: string;
+  npwp?: string;
+  birthDate?: string;
+  birthPlace?: string;
+  gender?: string;
+  maritalStatus?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  postalCode?: string;
+  workExperience?: number;
+}
+
 type Section = "settings" | "notifications" | "help";
 
 export default function AkunPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [active, setActive] = useState<Section>("settings");
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const tab = (searchParams.get("tab") || "").toLowerCase();
@@ -61,8 +89,42 @@ export default function AkunPage() {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const response = await getUserProfile();
+        if (response.success) {
+          setUserProfile(response.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch user profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserProfile();
+  }, []);
+
   const goLogout = () => router.push("/");
   const goBack = () => router.push("/dashboard");
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatPhoneNumber = (phone: string) => {
+    // Convert phone number to display format
+    if (phone.startsWith('08')) {
+      return `+62 ${phone.substring(1)}`;
+    }
+    return phone;
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -97,16 +159,18 @@ export default function AkunPage() {
                 <div className="relative w-12 h-12 rounded-full overflow-hidden">
                   <Image
                     src="/images/avatars/cecilion.png"
-                    alt="Admin Ahong"
+                    alt={loading ? "Loading..." : userProfile?.fullName || "User"}
                     fill
                     className="object-cover"
                   />
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 leading-tight">
-                    Admin Ahong
+                    {loading ? "Loading..." : userProfile?.fullName || "User"}
                   </h3>
-                  <p className="text-xs text-gray-500 -mt-0.5">Administrator</p>
+                  <p className="text-xs text-gray-500 -mt-0.5">
+                    {loading ? "Loading..." : userProfile?.roleName || "User"}
+                  </p>
                 </div>
               </div>
 
@@ -148,7 +212,14 @@ export default function AkunPage() {
           {/* CONTENT */}
           <section className="md:col-span-8 lg:col-span-9">
             <div className="rounded-2xl bg-white border shadow-sm p-6 space-y-12">
-              {active === "settings" && <SettingsContent />}
+              {active === "settings" && (
+                <SettingsContent 
+                  userProfile={userProfile} 
+                  loading={loading} 
+                  formatPhoneNumber={formatPhoneNumber}
+                  formatCurrency={formatCurrency}
+                />
+              )}
               {active === "notifications" && <NotificationsContent />}
               {active === "help" && <HelpContent />}
             </div>
@@ -200,7 +271,12 @@ function SidebarItem({
 }
 
 /* Content */
-function SettingsContent() {
+function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurrency }: { 
+  userProfile: UserProfile | null; 
+  loading: boolean;
+  formatPhoneNumber: (phone: string) => string;
+  formatCurrency: (amount: number) => string;
+}) {
   return (
     <div className="akun w-full">
       <Tabs defaultValue="account" className="w-full">
@@ -222,37 +298,84 @@ function SettingsContent() {
             <CardContent className="grid gap-6 md:grid-cols-2">
               <div className="grid gap-3">
                 <Label htmlFor="name">Full Name</Label>
-                <Input id="name" defaultValue="Admin Ahong" />
+                <Input 
+                  id="name" 
+                  defaultValue={loading ? "Loading..." : userProfile?.fullName || ""} 
+                  disabled={loading}
+                />
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="admin@satuatap.com" />
+                <Input 
+                  id="email" 
+                  type="email" 
+                  defaultValue={loading ? "Loading..." : userProfile?.email || ""} 
+                  disabled={loading}
+                />
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="username">Username</Label>
-                <Input id="username" defaultValue="ahong123" />
+                <Input 
+                  id="username" 
+                  defaultValue={loading ? "Loading..." : userProfile?.username || ""} 
+                  disabled={loading}
+                />
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="phone">Phone Number</Label>
-                <Input id="phone" defaultValue="+62 812 3456 7890" />
+                <Input 
+                  id="phone" 
+                  defaultValue={loading ? "Loading..." : (userProfile?.phone ? formatPhoneNumber(userProfile.phone) : "")} 
+                  disabled={loading}
+                />
               </div>
 
               <div className="grid gap-3">
                 <Label htmlFor="position">Position</Label>
-                <Input id="position" defaultValue="Administrator" />
+                <Input 
+                  id="position" 
+                  defaultValue={loading ? "Loading..." : userProfile?.occupation || ""} 
+                  disabled={loading}
+                />
               </div>
 
               <div className="grid gap-3">
-                <Label htmlFor="department">Department</Label>
-                <Input id="department" defaultValue="Digital Lending Division" />
+                <Label htmlFor="department">Company</Label>
+                <Input 
+                  id="department" 
+                  defaultValue={loading ? "Loading..." : userProfile?.companyName || ""} 
+                  disabled={loading}
+                />
               </div>
+
+              {userProfile?.monthlyIncome && (
+                <div className="grid gap-3">
+                  <Label htmlFor="income">Monthly Income</Label>
+                  <Input 
+                    id="income" 
+                    defaultValue={loading ? "Loading..." : formatCurrency(userProfile.monthlyIncome)} 
+                    disabled={loading}
+                  />
+                </div>
+              )}
+
+              {userProfile?.nik && (
+                <div className="grid gap-3">
+                  <Label htmlFor="nik">NIK</Label>
+                  <Input 
+                    id="nik" 
+                    defaultValue={loading ? "Loading..." : userProfile.nik} 
+                    disabled={loading}
+                  />
+                </div>
+              )}
             </CardContent>
 
             <CardFooter>
-              <Button className="ml-auto bg-[#0B63E5] hover:bg-[#094ec1]">
+              <Button className="ml-auto bg-[#0B63E5] hover:bg-[#094ec1]" disabled={loading}>
                 Save Changes
               </Button>
             </CardFooter>

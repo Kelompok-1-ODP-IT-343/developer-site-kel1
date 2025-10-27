@@ -1,4 +1,4 @@
-//Data masih diambil dari customers.ts
+//Data diambil dari API KPR Applications
 
 "use client"
 
@@ -20,35 +20,121 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { customers, Customer } from "@/components/data/customers"
-// import { ArrowUpIcon } from "lucide-react"
+import { getKPRApplicationsProgress } from "@/lib/coreApi"
 import { useRouter } from "next/navigation"
 import { Calculator, Settings2 } from "lucide-react"
 
+// KPR Application interface based on API response
+interface KPRApplication {
+  id: number
+  applicantName: string
+  applicantEmail: string
+  applicantPhone: string
+  aplikasiKode: string
+  namaProperti: string
+  alamat: string
+  harga: number
+  tanggal: string
+  jenis: string
+}
+
+interface ApiResponse {
+  success: boolean
+  message: string
+  data: KPRApplication[]
+  timestamp: string
+  path: string | null
+}
+
 export default function ApprovalTable() {
   const router = useRouter()
+  const [kprApplications, setKprApplications] = React.useState<KPRApplication[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
-  const handleActionClick = (customer: Customer) => {
-    router.push(`/dashboard/simulate?id=${customer.id}`)
+  // Fetch KPR applications data
+  React.useEffect(() => {
+    const fetchKPRApplications = async () => {
+      try {
+        setLoading(true)
+        const response: ApiResponse = await getKPRApplicationsProgress()
+        if (response.success) {
+          setKprApplications(response.data)
+        } else {
+          setError(response.message || "Failed to fetch KPR applications")
+        }
+      } catch (err) {
+        console.error("Error fetching KPR applications:", err)
+        setError("Failed to fetch KPR applications")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchKPRApplications()
+  }, [])
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount)
   }
 
+  // Format date
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("id-ID", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  }
 
-  const columns: ColumnDef<Customer>[] = [
+  const handleActionClick = (application: KPRApplication) => {
+    router.push(`/dashboard/simulate?id=${application.id}`)
+  }
+
+  const columns: ColumnDef<KPRApplication>[] = [
     {
-      accessorKey: "name",
-      header: () => <div className="font-semibold">Name</div>,
-      cell: ({ row }) => <div className="capitalize">{row.getValue("name")}</div>,
+      accessorKey: "aplikasiKode",
+      header: () => <div className="font-semibold">Application Code</div>,
+      cell: ({ row }) => <div className="font-medium">{row.getValue("aplikasiKode")}</div>,
     },
     {
-      accessorKey: "email",
+      accessorKey: "applicantName",
+      header: () => <div className="font-semibold">Applicant Name</div>,
+      cell: ({ row }) => <div className="capitalize">{row.getValue("applicantName")}</div>,
+    },
+    {
+      accessorKey: "applicantEmail",
       header: () => <div className="font-semibold">Email</div>,
-      cell: ({ row }) => <div className="lowercase">{row.getValue("email")}</div>,
+      cell: ({ row }) => <div className="lowercase">{row.getValue("applicantEmail")}</div>,
     },
     {
-      accessorKey: "phone",
-      header: () => <div className="font-semibold">Phone</div>,
+      accessorKey: "namaProperti",
+      header: () => <div className="font-semibold">Property</div>,
+      cell: ({ row }) => <div className="font-medium">{row.getValue("namaProperti")}</div>,
+    },
+    {
+      accessorKey: "harga",
+      header: () => <div className="font-semibold">Price</div>,
       cell: ({ row }) => (
-        <div className="text-center font-medium">{row.getValue("phone")}</div>
+        <div className="text-right font-medium">{formatCurrency(row.getValue("harga"))}</div>
+      ),
+    },
+    {
+      accessorKey: "jenis",
+      header: () => <div className="font-semibold">KPR Type</div>,
+      cell: ({ row }) => <div className="font-medium">{row.getValue("jenis")}</div>,
+    },
+    {
+      accessorKey: "tanggal",
+      header: () => <div className="font-semibold">Date</div>,
+      cell: ({ row }) => (
+        <div className="font-medium">{formatDate(row.getValue("tanggal"))}</div>
       ),
     },
     {
@@ -59,14 +145,14 @@ export default function ApprovalTable() {
         </div>
       ),
       cell: ({ row }) => {
-        const customer = row.original
+        const application = row.original
         return (
           <div className="flex justify-center">
             <Button
               variant="outline"
               size="sm"
               aria-label="Simulate"
-              onClick={() => handleActionClick(customer)}
+              onClick={() => handleActionClick(application)}
               className="flex items-center gap-2" 
             >
               <Settings2 className="w-4 h-4" /> 
@@ -79,24 +165,46 @@ export default function ApprovalTable() {
   ]
 
   const table = useReactTable({
-    data: customers,
+    data: kprApplications,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   })
 
+  if (loading) {
+    return (
+      <div className="w-full">
+        <div className="flex items-center justify-center py-8">
+          <div className="text-muted-foreground">Loading KPR applications...</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="w-full">
+        <div className="flex items-center justify-center py-8">
+          <div className="text-red-500">Error: {error}</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="w-full">
       <div className="flex items-center py-4">
         <Input
-          placeholder="Filter emails..."
+          placeholder="Filter by applicant name or email..."
           className="max-w-sm"
           onChange={(e) => {
             const value = e.target.value.toLowerCase()
-            const filtered = customers.filter((c) =>
-              c.email.toLowerCase().includes(value)
+            const filtered = kprApplications.filter((app) =>
+              app.applicantName.toLowerCase().includes(value) ||
+              app.applicantEmail.toLowerCase().includes(value) ||
+              app.aplikasiKode.toLowerCase().includes(value)
             )
-            table.options.data = filtered.length ? filtered : customers
+            table.options.data = filtered.length ? filtered : kprApplications
           }}
         />
       </div>
@@ -150,7 +258,7 @@ export default function ApprovalTable() {
                       className={`
                         py-3 px-4 text-sm
                         ${
-                          cell.column.id === "email"
+                          cell.column.id === "applicantEmail"
                             ? "text-muted-foreground"
                             : "font-medium"
                         }
@@ -167,7 +275,7 @@ export default function ApprovalTable() {
                   colSpan={table.getAllColumns().length + 1}
                   className="h-24 text-center text-muted-foreground"
                 >
-                  No results.
+                  No KPR applications found.
                 </TableCell>
               </TableRow>
             )}
@@ -175,7 +283,7 @@ export default function ApprovalTable() {
         </Table>
       </div>
 
-            <div className="flex items-center justify-end space-x-2 py-4">
+      <div className="flex items-center justify-end space-x-2 py-4">
         <Button
           variant="outline"
           size="sm"

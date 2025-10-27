@@ -20,12 +20,30 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-
-import { customers } from "@/components/data/history"
-import { properties } from "@/components/data/properties"
+import coreApi from "@/lib/coreApi"
 
 // Lazy load dialog agar tidak berat di awal
 const ViewApprovalDetails = React.lazy(() => import("@/components/dialogs/ViewApprovalDetails"))
+
+// Updated type based on API response
+type KPRApplication = {
+  id: number
+  namaRumah: string
+  statusPengajuan: string
+  lokasiRumah: string
+  aplikasiKode: string
+  jumlahPinjaman: number
+  tanggalPengajuan: string
+  fotoProperti: string
+}
+
+type ApiResponse = {
+  success: boolean
+  message: string
+  data: KPRApplication[]
+  timestamp: string
+  path: string | null
+}
 
 type HistoryRow = {
   id: string
@@ -34,7 +52,7 @@ type HistoryRow = {
   property_name: string
   address: string
   price: number
-  status: "approve" | "reject"
+  status: string
   approval_date: string
 }
 
@@ -48,34 +66,68 @@ function formatDate(dateString: string) {
   })
 }
 
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    minimumFractionDigits: 0,
+  }).format(amount)
+}
+
 export default function ApprovalHistory() {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [filter, setFilter] = React.useState("")
   const [selectedRow, setSelectedRow] = React.useState<HistoryRow | null>(null)
   const [openDialog, setOpenDialog] = React.useState(false)
+  const [data, setData] = React.useState<KPRApplication[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
 
-  // 🔗 Gabungkan data customer dan property
-  const joinedData: HistoryRow[] = React.useMemo(() => {
-    return customers.map((cust) => {
-      const prop = properties.find((p) => p.id === cust.property_id)
-      return {
-        id: cust.id,
-        application_id: cust.application_id || `APP-${cust.id.padStart(3, "0")}`,
-        customer_name: cust.name,
-        property_name: prop?.title || "Properti tidak ditemukan",
-        address: prop ? `${prop.address}, ${prop.city}` : "-",
-        price: prop?.price || 0,
-        status: cust.status,
-        approval_date: cust.approval_date,
+  // Fetch data from API
+  React.useEffect(() => {
+    const fetchApprovalHistory = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const response = await coreApi.get<ApiResponse>('/kpr-applications/developer/history')
+
+        if (response.data.success) {
+          setData(response.data.data)
+        } else {
+          setError(response.data.message || 'Failed to fetch approval history')
+        }
+      } catch (err: any) {
+        console.error('Error fetching approval history:', err)
+        setError(err.response?.data?.message || 'Failed to fetch approval history')
+      } finally {
+        setLoading(false)
       }
-    })
+    }
+
+    fetchApprovalHistory()
   }, [])
 
+  // Transform API data to table format
+  const transformedData: HistoryRow[] = React.useMemo(() => {
+    return data.map((item) => ({
+      id: item.id.toString(),
+      application_id: item.aplikasiKode,
+      customer_name: "N/A", // Not provided in API response
+      property_name: item.namaRumah,
+      address: item.lokasiRumah,
+      price: item.jumlahPinjaman,
+      status: item.statusPengajuan.toLowerCase(),
+      approval_date: item.tanggalPengajuan,
+    }))
+  }, [data])
+
   const filteredData = React.useMemo(() => {
-    return joinedData.filter((item) =>
-      item.customer_name.toLowerCase().includes(filter.toLowerCase())
+    return transformedData.filter((item) =>
+      item.property_name.toLowerCase().includes(filter.toLowerCase()) ||
+      item.application_id.toLowerCase().includes(filter.toLowerCase()) ||
+      item.address.toLowerCase().includes(filter.toLowerCase())
     )
-  }, [filter, joinedData])
+  }, [filter, transformedData])
 
   // ===== Kolom =====
   const columns: ColumnDef<HistoryRow>[] = [
@@ -90,11 +142,6 @@ export default function ApprovalHistory() {
       cell: ({ row }) => <div className="font-medium">{row.getValue("application_id")}</div>,
     },
     {
-      accessorKey: "customer_name",
-      header: () => <div className="font-semibold">Nama Customer</div>,
-      cell: ({ row }) => <div>{row.getValue("customer_name")}</div>,
-    },
-    {
       accessorKey: "property_name",
       header: () => <div className="font-semibold">Nama Properti</div>,
       cell: ({ row }) => <div>{row.getValue("property_name")}</div>,
@@ -102,23 +149,23 @@ export default function ApprovalHistory() {
     {
       accessorKey: "address",
       header: () => <div className="font-semibold">Alamat</div>,
-      cell: ({ row }) => <div>{row.getValue("address")}</div>,
+      cell: ({ row }) => <div className="text-sm">{row.getValue("address")}</div>,
     },
     {
       accessorKey: "price",
-      header: () => <div className="font-semibold">Harga</div>,
+      header: () => <div className="font-semibold">Jumlah Pinjaman</div>,
       cell: ({ row }) => {
         const price = row.getValue("price") as number
         return (
           <div className="font-medium">
-            {price > 0 ? `Rp ${price.toLocaleString("id-ID")}` : "-"}
+            {formatCurrency(price)}
           </div>
         )
       },
     },
     {
       accessorKey: "approval_date",
-      header: () => <div className="font-medium">Tanggal</div>,
+      header: () => <div className="font-medium">Tanggal Pengajuan</div>,
       cell: ({ row }) => (
         <div className="font-semibold">{formatDate(row.getValue("approval_date") as string)}</div>
       ),
@@ -127,8 +174,36 @@ export default function ApprovalHistory() {
       accessorKey: "status",
       header: () => <div className="font-semibold">Status</div>,
       cell: ({ row }) => {
-        const status = row.getValue("status") as "approve" | "reject"
-        const approved = status === "approve"
+        const status = row.getValue("status") as "approve" | "reject" | "submitted"
+        const getStatusConfig = (status: string) => {
+          switch (status) {
+            case "approve":
+              return {
+                text: "Approved",
+                bgColor: "bg-green-200 hover:bg-green-300",
+                textColor: "text-green-900",
+                dotColor: "bg-green-700"
+              }
+            case "reject":
+              return {
+                text: "Rejected",
+                bgColor: "bg-rose-200 hover:bg-rose-300",
+                textColor: "text-rose-900",
+                dotColor: "bg-rose-700"
+              }
+            case "submitted":
+            default:
+              return {
+                text: "Submitted",
+                bgColor: "bg-blue-200 hover:bg-blue-300",
+                textColor: "text-blue-900",
+                dotColor: "bg-blue-700"
+              }
+          }
+        }
+
+        const config = getStatusConfig(status)
+
         return (
           <Button
             size="sm"
@@ -137,18 +212,10 @@ export default function ApprovalHistory() {
               setSelectedRow(row.original)
               setOpenDialog(true)
             }}
-            className={`flex items-center gap-2 px-3 py-1 rounded-md font-semibold shadow-sm ${
-              approved
-                ? "text-green-900 bg-green-200 hover:bg-green-300"
-                : "text-rose-900 bg-rose-200 hover:bg-rose-300"
-            }`}
+            className={`flex items-center gap-2 px-3 py-1 rounded-md font-semibold shadow-sm ${config.bgColor} ${config.textColor}`}
           >
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                approved ? "bg-green-700" : "bg-rose-700"
-              }`}
-            />
-            {approved ? "Approved" : "Rejected"}
+            <span className={`h-2.5 w-2.5 rounded-full ${config.dotColor}`} />
+            {config.text}
           </Button>
         )
       },
@@ -165,13 +232,50 @@ export default function ApprovalHistory() {
     state: { sorting },
   })
 
+  if (loading) {
+    return (
+      <div className="w-full">
+        <div className="flex items-center justify-between py-4">
+          <h2 className="text-lg font-semibold">Approval History</h2>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading approval history...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="w-full">
+        <div className="flex items-center justify-between py-4">
+          <h2 className="text-lg font-semibold">Approval History</h2>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-red-600 mb-4">Error: {error}</p>
+            <Button
+              onClick={() => window.location.reload()}
+              variant="outline"
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="w-full">
       {/* --- Header Filter --- */}
       <div className="flex items-center justify-between py-4">
         <h2 className="text-lg font-semibold">Approval History</h2>
         <Input
-          placeholder="Cari nama customer..."
+          placeholder="Cari properti, kode aplikasi, atau alamat..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="max-w-sm"
@@ -244,7 +348,10 @@ export default function ApprovalHistory() {
           <ViewApprovalDetails
             open={openDialog}
             onOpenChange={setOpenDialog}
-            data={selectedRow}
+            data={{
+              ...selectedRow,
+              status: selectedRow.status,
+            }}
           />
         )}
       </React.Suspense>

@@ -84,13 +84,13 @@ coreApi.interceptors.response.use(
         if (response.data.success) {
           const { token } = response.data.data;
           localStorage.setItem("access_token", token);
-          
+
           // Update authorization header
           originalRequest.headers["Authorization"] = `Bearer ${token}`;
-          
+
           // Process queued requests
           processQueue(null, token);
-          
+
           // Retry the original request
           return coreApi(originalRequest);
         } else {
@@ -126,3 +126,25 @@ coreApi.interceptors.response.use(
 );
 
 export default coreApi;
+
+// User Profile API functions
+export const getUserProfile = async () => {
+  try {
+    const response = await coreApi.get("/user/profile");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    throw error;
+  }
+};
+
+// KPR Applications API functions
+export const getKPRApplicationsProgress = async () => {
+  try {
+    const response = await coreApi.get("/kpr-applications/developer/progress");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching KPR applications progress:", error);
+    throw error;
+  }
+};

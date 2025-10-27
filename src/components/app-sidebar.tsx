@@ -31,6 +31,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
+import { useState, useEffect } from "react"
+import { getUserProfile } from "@/lib/coreApi"
 
 // Menu dengan ikon sesuai nama
 const menuItems = [
@@ -41,6 +43,19 @@ const menuItems = [
 
 import { logout } from "@/services/auth"
 
+interface UserProfile {
+  id: number;
+  username: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  roleName: string;
+  status: string;
+  monthlyIncome: number;
+  occupation?: string;
+  companyName?: string;
+}
+
 interface AppSidebarProps {
   activeMenu: string;
   onSelect: (menu: string) => void;
@@ -49,6 +64,25 @@ interface AppSidebarProps {
 
 export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) {
   const router = useRouter()
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const response = await getUserProfile()
+        if (response.success) {
+          setUserProfile(response.data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch user profile:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchUserProfile()
+  }, [])
 
   return (
     <Sidebar collapsible="icon">
@@ -108,10 +142,10 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
                 />
                 <div className="flex flex-col text-left truncate">
                   <span className="text-sm font-semibold text-sidebar-foreground truncate">
-                    Admin Ahong
+                    {loading ? "Loading..." : userProfile?.fullName || "User"}
                   </span>
                   <span className="text-xs text-gray-400 truncate">
-                    admin@satuatap.com
+                    {loading ? "Loading..." : userProfile?.email || "user@example.com"}
                   </span>
                 </div>
               </div>
@@ -135,14 +169,14 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
                 >
                   <p style={{ margin: 0, padding: 0, lineHeight: "1", fontSize: "12px" }}>
                     <span style={{ fontWeight: 600, color: "#374151" }}>
-                      Admin Ahong
+                      {loading ? "Loading..." : userProfile?.fullName || "User"}
                     </span>
                   </p>
                   <p style={{ margin: 0, padding: 0, lineHeight: "1", fontSize: "12px", color: "#4b5563" }}>
-                    Administrator
+                    {loading ? "Loading..." : userProfile?.roleName || "User"}
                   </p>
                   <p style={{ margin: 0, padding: 0, lineHeight: "1", fontSize: "12px", color: "#6b7280" }}>
-                    admin@satuatap.com
+                    {loading ? "Loading..." : userProfile?.email || "user@example.com"}
                   </p>
                 </div>
               </div>
