@@ -94,7 +94,7 @@ export default function ApprovalTable() {
   }
 
   const handleActionClick = (application: KPRApplication) => {
-    router.push(`/dashboard/simulate?id=${application.id}`)
+    router.push(`/dashboard/detail/${application.id}`)
   }
 
   const columns: ColumnDef<KPRApplication>[] = [
@@ -153,10 +153,10 @@ export default function ApprovalTable() {
               size="sm"
               aria-label="Simulate"
               onClick={() => handleActionClick(application)}
-              className="flex items-center gap-2" 
+              className="flex items-center gap-2"
             >
-              <Settings2 className="w-4 h-4" /> 
-              Action 
+              <Settings2 className="w-4 h-4" />
+              Action
             </Button>
           </div>
         )
@@ -215,7 +215,7 @@ export default function ApprovalTable() {
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow
                 key={headerGroup.id}
-                className="bg-muted/80 divide-x divide-border" 
+                className="bg-muted/80 divide-x divide-border"
               >
                 {/* Kolom nomor */}
                 <TableHead className="py-3 px-4 text-sm font-semibold text-foreground text-center w-[60px]">

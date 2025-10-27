@@ -2,8 +2,8 @@ import axios, { AxiosHeaders } from "axios";
 
 // Axios instance untuk seluruh request ke API Satu Atap
 const coreApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1",
-  timeout: 15000,
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  timeout: 10000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -145,6 +145,44 @@ export const getKPRApplicationsProgress = async () => {
     return response.data;
   } catch (error) {
     console.error("Error fetching KPR applications progress:", error);
+    throw error;
+  }
+};
+
+export const getKPRApplicationDetail = async (applicationId: string) => {
+  try {
+    const response = await coreApi.get(`/kpr-applications/${applicationId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching KPR application detail:", error);
+    throw error;
+  }
+};
+
+export const approveKPRApplication = async (applicationId: string, approvalNotes: string) => {
+  try {
+    const response = await coreApi.post(`/approval/developer`, {
+      isApproved: true,
+      reason: approvalNotes || "",
+      applicationId: parseInt(applicationId)
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error approving KPR application:", error);
+    throw error;
+  }
+};
+
+export const rejectKPRApplication = async (applicationId: string, rejectionReason: string) => {
+  try {
+    const response = await coreApi.post(`/approval/developer`, {
+      isApproved: false,
+      reason: rejectionReason || "",
+      applicationId: parseInt(applicationId)
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error rejecting KPR application:", error);
     throw error;
   }
 };
