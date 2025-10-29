@@ -163,7 +163,12 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
         setLoadError(null);
 
         const api = await getKPRApplicationDetail(id);
-        const payload: KPRApplicationData | undefined = api?.data ?? api;
+
+        // Works for either AxiosResponse<{ success, message, data }> or plain object
+        const payload: KPRApplicationData | undefined =
+          api?.data?.data ??     // <- inner data for { success, message, data }
+          api?.data ??           // <- plain { ... } returned as AxiosResponse
+          api;
         if (!active) return;
 
         if (!payload) {
@@ -171,7 +176,6 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           setLoadError('Data tidak ditemukan.');
           return;
         }
-
         setCustomer(mapToCustomerDetail(id, payload));
       } catch (e: any) {
         setLoadError(e?.message || 'Gagal memuat data.');
@@ -559,48 +563,48 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
 /* ---------- Helpers ---------- */
 
 function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail {
-  // prefer flat fields; fallback to nested userInfo if present
   const ui = d.userInfo ?? {};
-  // try find KTP/SLIP from documents if available
-  const ktpDoc = d.documents?.find((x) => /KTP|IDENTITY/i.test(x.documentType ?? ''));
-  const slipDoc = d.documents?.find((x) => /SLIP|GAJI|INCOME/i.test(x.documentType ?? ''));
+
+  const ktpDoc  = d.documents?.find(x => /KTP|IDENTITY/i.test(x.documentType ?? ''));
+  const slipDoc = d.documents?.find(x => /SLIP|GAJI|INCOME/i.test(x.documentType ?? ''));
 
   return {
     id: String(d.id ?? d.applicationId ?? id),
     name: d.applicantName ?? d.fullName ?? ui.fullName ?? 'Tidak Diketahui',
-    username: d.username ?? '-',
-    email: d.applicantEmail ?? d.email ?? 'unknown@example.com',
-    phone: d.applicantPhone ?? d.phone ?? ui.phone ?? '-',
-    nik: d.nik ?? ui.nik ?? '-',
-    npwp: d.npwp ?? ui['npwp' as keyof typeof ui] as any ?? '-',
-    birth_place: d.birthPlace ?? ui.birthPlace ?? '-',
-    birth_date: (d as any).birthDate ?? '-', // adjust if backend returns it
-    gender: d.gender ?? '-',
-    marital_status: d.marital_status ?? (ui as any).maritalStatus ?? '-',
+    username: d.username ?? ui['username' as keyof typeof ui] as any ?? '-', // optional
+    email: d.applicantEmail ?? d.email ?? (ui as any).email ?? 'unknown@example.com',   // <-- add ui.email
+    phone: d.applicantPhone ?? d.phone ?? (ui as any).phone ?? '-',
+    nik: d.nik ?? (ui as any).nik ?? '-',
+    npwp: d.npwp ?? (ui as any).npwp ?? '-',
+    birth_place: d.birthPlace ?? (ui as any).birthPlace ?? '-',
+    birth_date: (d as any).birthDate ?? (ui as any).birthDate ?? '-',        // <-- add ui.birthDate
+    gender: d.gender ?? (ui as any).gender ?? '-',
+    marital_status: (d as any).marital_status ?? (ui as any).maritalStatus ?? '-', // keep both shapes
     address: d.address ?? (ui as any).address ?? '-',
-    sub_district: d.sub_district ?? '-',
-    district: d.district ?? '-',
+    sub_district: (d as any).sub_district ?? '-', // (not present in sample; keep safe)
+    district: (d as any).district ?? '-',
     city: d.city ?? (ui as any).city ?? '-',
     province: d.province ?? (ui as any).province ?? '-',
-    postal_code: d.postal_code ?? (ui as any).postalCode ?? '-',
+    postal_code: (d as any).postal_code ?? (ui as any).postalCode ?? '-',
 
     occupation: d.occupation ?? (ui as any).occupation ?? '-',
     monthly_income: d.monthly_income ?? d.income ?? (ui as any).monthlyIncome ?? '-',
     company_name: d.company_name ?? (ui as any).companyName ?? '-',
-    company_address: d.company_address ?? '-',
-    company_subdistrict: d.company_subdistrict ?? '-',
-    company_district: d.company_district ?? '-',
-    company_city: d.company_city ?? '-',
-    company_province: d.company_province ?? '-',
-    company_postal_code: d.company_postal_code ?? '-',
+    company_address: (d as any).company_address ?? (ui as any).companyAddress ?? '-',
+    company_subdistrict: (d as any).company_subdistrict ?? '-',
+    company_district: (d as any).company_district ?? '-',
+    company_city: (d as any).company_city ?? '-',
+    company_province: (d as any).company_province ?? '-',
+    company_postal_code: (d as any).company_postal_code ?? '-',
 
-    credit_status: d.credit_status ?? 'Lancar',
-    credit_score: d.credit_score ?? '01',
+    credit_status: (d as any).credit_status ?? 'Lancar',
+    credit_score: (d as any).credit_score ?? '01',
 
     ktp: ktpDoc?.filePath ?? null,
     slip: slipDoc?.filePath ?? null,
   };
 }
+
 
 function getCreditStatusColor(status?: string) {
   switch (status) {
