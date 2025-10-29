@@ -2,7 +2,8 @@ import axios, { AxiosHeaders } from "axios";
 
 // Axios instance untuk seluruh request ke API Satu Atap
 const coreApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1",
+  // baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",

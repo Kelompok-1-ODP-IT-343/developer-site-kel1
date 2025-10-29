@@ -1,576 +1,775 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ArrowLeft, CheckCircle, XCircle, User, Home, Building, FileText, Calendar, DollarSign, Eye } from 'lucide-react'
-import { toast } from 'sonner'
-import coreApi, { getKPRApplicationDetail, approveKPRApplication, rejectKPRApplication } from '@/lib/coreApi'
+import React, { useMemo, useState, useEffect, JSX } from 'react';
+import { useRouter, useSearchParams, useParams } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import {
+  Check, X, XCircle, Trash2,
+  User2, Wallet, BarChart3, FileText, Eye, Settings2
+} from 'lucide-react';
+import ViewDocumentDialog from '@/components/dialogs/ViewDocumentDialog';
+import { getKPRApplicationDetail } from '@/lib/coreApi';
 
-interface KPRApplicationData {
-  applicationId: number
-  applicationNumber: string
-  propertyType: string
-  propertyValue: number
-  propertyAddress: string
-  propertyCertificateType: string
-  developerName: string
-  loanAmount: number
-  loanTermYears: number
-  interestRate: number
-  monthlyInstallment: number
-  downPayment: number
-  ltvRatio: number
-  purpose: string
-  status: string
-  submittedAt: string
-  userInfo: {
-    fullName: string
-    nik: string
-    npwp: string
-    birthPlace: string
-    gender: string
-    maritalStatus: string
-    address: string
-    city: string
-    province: string
-    postalCode: string
-    occupation: string
-    companyName: string
-    monthlyIncome: number
-    phone: string
-    email: string
-  }
-  propertyInfo: {
-    title: string
-    description: string
-    address: string
-    city: string
-    province: string
-    landArea: number
-    buildingArea: number
-    bedrooms: number
-    bathrooms: number
-    floors: number
-    yearBuilt: number
-    price: number
-    certificateType: string
-    certificateNumber: string
-  }
-  developerInfo: {
-    companyName: string
-    contactPerson: string
-    phone: string
-    email: string
-    address: string
-    city: string
-    province: string
-    establishedYear: number
-    description: string
-    specialization: string
-    partnershipLevel: string
-  }
-  kprRateInfo: {
-    rateName: string
-    rateType: string
-    propertyType: string
-    customerSegment: string
-    effectiveRate: number
-    minLoanAmount: number
-    maxLoanAmount: number
-    minTermYears: number
-    maxTermYears: number
-    maxLtvRatio: number
-    adminFee: number
-    appraisalFee: number
-    insuranceRate: number
-  }
-  documents: Array<{
-    documentId: number
-    documentType: string
-    documentName: string
-    filePath: string
-    fileSize: number
-    mimeType: string
-    isVerified: boolean
-    uploadedAt: string
-  }>
-  approvalWorkflows: Array<{
-    workflowId: number
-    stage: string
-    status: string
-    priority: string
-    dueDate: string
-    assignedToName: string
-  }>
-}
+/** ---------- Types from your API (minimal) ---------- */
+type KPRApplicationData = {
+  id?: number;
+  applicationId?: number;
+  applicantName?: string;
+  fullName?: string;
+  username?: string;
+  applicantEmail?: string;
+  email?: string;
+  applicantPhone?: string;
+  phone?: string;
+  nik?: string;
+  npwp?: string;
+  birthPlace?: string;
+  birthDate?: string;
+  gender?: string;
+  marital_status?: string;
+  address?: string;
+  sub_district?: string;
+  district?: string;
+  city?: string;
+  province?: string;
+  postal_code?: string;
 
-export default function KPRDetailPage() {
-  const params = useParams()
-  const router = useRouter()
-  const [kprData, setKprData] = useState<KPRApplicationData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [actionLoading, setActionLoading] = useState<'approve' | 'reject' | null>(null)
-  const [documentModal, setDocumentModal] = useState<{
-    isOpen: boolean
-    document: any | null
-  }>({
-    isOpen: false,
-    document: null
-  })
+  occupation?: string;
+  monthly_income?: number | string;
+  income?: number | string;
+  company_name?: string;
+  company_address?: string;
+  company_subdistrict?: string;
+  company_district?: string;
+  company_city?: string;
+  company_province?: string;
+  company_postal_code?: string;
 
-  const applicationId = params.id as string
+  credit_status?: string;
+  credit_score?: string | number;
+
+  // When you return nested structures:
+  userInfo?: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    nik?: string;
+    npwp?: string;
+    birthPlace?: string;
+    gender?: string;
+    maritalStatus?: string;
+    address?: string;
+    city?: string;
+    province?: string;
+    postalCode?: string;
+    occupation?: string;
+    companyName?: string;
+    monthlyIncome?: number;
+  };
+
+  documents?: Array<{
+    documentId: number;
+    documentType: string;
+    documentName: string;
+    filePath: string;
+    fileSize: number;
+    mimeType: string;
+    isVerified: boolean;
+    uploadedAt: string;
+  }>;
+};
+
+type CustomerDetail = {
+  id: string;
+  name: string;
+  username?: string;
+  email: string;
+  phone?: string;
+  nik?: string;
+  npwp?: string;
+  birth_place?: string;
+  birth_date?: string;
+  gender?: string;
+  marital_status?: string;
+  address?: string;
+  sub_district?: string;
+  district?: string;
+  city?: string;
+  province?: string;
+  postal_code?: string;
+
+  occupation?: string;
+  monthly_income?: string | number;
+  company_name?: string;
+  company_address?: string;
+  company_subdistrict?: string;
+  company_district?: string;
+  company_city?: string;
+  company_province?: string;
+  company_postal_code?: string;
+
+  credit_status?: string;
+  credit_score?: string | number;
+
+  ktp?: string | null;
+  slip?: string | null;
+};
+
+type Row = {
+  month: number;
+  principalComponent: number;
+  interestComponent: number;
+  payment: number;
+  balance: number;
+  rateApplied: number;
+};
+
+type RateSegment = {
+  start: number;
+  end: number;
+  rate: number;
+  label?: string;
+};
+
+export default function ApprovalDetailIntegrated(): JSX.Element {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const params = useParams();
+
+  // support both /kpr/[id] and /kpr/detail?id=...
+  const id =
+    (params?.id as string | undefined) ??
+    (searchParams.get('id') ?? '');
+
+  const [customer, setCustomer] = useState<CustomerDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [docViewer, setDocViewer] = useState<{ open: boolean; title: string; url: string | null }>({
+    open: false,
+    title: '',
+    url: null,
+  });
 
   useEffect(() => {
-    fetchKPRDetail()
-  }, [applicationId])
+    let active = true;
+    (async () => {
+      if (!id) {
+        setLoadError('Missing id in URL.');
+        setLoading(false);
+        return;
+      }
+      try {
+        setLoading(true);
+        setLoadError(null);
 
-  const openDocumentModal = (document: any) => {
-    setDocumentModal({
-      isOpen: true,
-      document
-    })
-  }
+        const api = await getKPRApplicationDetail(id);
+        const payload: KPRApplicationData | undefined = api?.data ?? api;
+        if (!active) return;
 
-  const closeDocumentModal = () => {
-    setDocumentModal({
-      isOpen: false,
-      document: null
-    })
-  }
+        if (!payload) {
+          setCustomer(null);
+          setLoadError('Data tidak ditemukan.');
+          return;
+        }
 
-  const fetchKPRDetail = async () => {
-    try {
-      setLoading(true)
-      const result = await getKPRApplicationDetail(applicationId)
-      setKprData(result.data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
+        setCustomer(mapToCustomerDetail(id, payload));
+      } catch (e: any) {
+        setLoadError(e?.message || 'Gagal memuat data.');
+        setCustomer(null);
+      } finally {
+        active && setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [id]);
 
-  const handleApprove = async () => {
-    try {
-      setActionLoading('approve')
-      await approveKPRApplication(applicationId, 'Application approved after review')
-      toast.success('Application approved successfully')
-      fetchKPRDetail() // Refresh data
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to approve application')
-    } finally {
-      setActionLoading(null)
-    }
-  }
+  // ----- FICO dummy (no API) -----
+  const idNum = parseInt(id || '1', 10);
+  const seededRandom = (seed: number): number => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
+  const score: number = Math.floor(300 + (isNaN(idNum) ? 1 : seededRandom(idNum)) * 550);
 
-  const handleReject = async () => {
-    try {
-      setActionLoading('reject')
-      await rejectKPRApplication(applicationId, 'Application rejected after review')
-      toast.success('Application rejected successfully')
-      fetchKPRDetail() // Refresh data
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to reject application')
-    } finally {
-      setActionLoading(null)
-    }
-  }
+  // ----- KPR controls (local UI only) -----
+  const [hargaProperti, setHargaProperti] = useState(850_000_000);
+  const [persenDP, setPersenDP] = useState(20);
+  const [jangkaWaktu, setJangkaWaktu] = useState(20);
+  const tenor = jangkaWaktu * 12;
+  const loanAmount = hargaProperti * (1 - persenDP / 100);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount)
-  }
+  const [rateSegments, setRateSegments] = useState<RateSegment[]>([
+    { start: 1, end: 12, rate: 5.99 },
+    { start: 13, end: 240, rate: 13.5 },
+  ]);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
+  const rows = useMemo(() => buildMultiSegmentSchedule(loanAmount, rateSegments), [loanAmount, rateSegments]);
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      SUBMITTED: { variant: 'secondary' as const, label: 'Submitted' },
-      APPROVED: { variant: 'default' as const, label: 'Approved' },
-      REJECTED: { variant: 'destructive' as const, label: 'Rejected' },
-      PENDING: { variant: 'outline' as const, label: 'Pending' }
-    }
+  const pageSize = 12;
+  const [page, setPage] = useState(1);
 
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.PENDING
-    return <Badge variant={config.variant}>{config.label}</Badge>
-  }
+  const colors = { blue: '#3FD8D4', gray: '#757575', orange: '#FF8500' } as const;
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p>Loading KPR application details...</p>
-          </div>
-        </div>
+      <div className="min-h-[60vh] flex items-center justify-center text-sm text-muted-foreground">
+        Loading detail...
       </div>
-    )
+    );
   }
 
-  if (error || !kprData) {
+  if (loadError) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <XCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-            <p className="text-destructive">{error || 'KPR application not found'}</p>
-            <Button onClick={() => router.back()} className="mt-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Go Back
-            </Button>
-          </div>
-        </div>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2">
+        <p className="text-red-600 font-medium">Error: {loadError}</p>
+        <Button variant="outline" onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
       </div>
-    )
+    );
   }
+
+  if (!customer) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2">
+        <p className="text-muted-foreground">Data tidak tersedia.</p>
+        <Button variant="outline" onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
+      </div>
+    );
+  }
+
+  const openDoc = (title: string, url: string | null) => setDocViewer({ open: true, title, url });
+  const closeDoc = () => setDocViewer({ open: false, title: '', url: null });
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="approval-page min-h-screen bg-white text-gray-700 relative">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">KPR Application Detail</h1>
-            <p className="text-muted-foreground">{kprData.applicationNumber}</p>
-          </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          {getStatusBadge(kprData.status)}
-          {kprData.status === 'SUBMITTED' && (
-            <div className="flex space-x-2">
-              <Button
-                onClick={handleReject}
-                variant="destructive"
-                disabled={actionLoading !== null}
-                className="flex items-center"
-              >
-                {actionLoading === 'reject' ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                ) : (
-                  <XCircle className="h-4 w-4 mr-2" />
-                )}
-                Reject
-              </Button>
-              <Button
-                onClick={handleApprove}
-                disabled={actionLoading !== null}
-                className="flex items-center"
-              >
-                {actionLoading === 'approve' ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                ) : (
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                )}
-                Approve
-              </Button>
+      <header className="sticky top-0 z-10 border-b bg-white" style={{ borderColor: colors.blue }}>
+        <div className="max-w-7xl mx-auto flex justify-between items-center px-6 py-4 relative">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl overflow-hidden">
+              <img src="/logo-satuatap.png" alt="Satu Atap Logo" className="h-full w-full object-cover" />
             </div>
-          )}
+            <div>
+              <h1 className="font-semibold text-lg text-black">Approval Detail KPR</h1>
+              <p className="text-xs">Satu Atap Admin • Simulasi Suku Bunga</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="absolute right-6 top-3 flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all"
+          >
+            <XCircle className="h-6 w-6" /> Close
+          </button>
         </div>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Application Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <DollarSign className="h-5 w-5 mr-2" />
-                Loan Summary
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Property Value</p>
-                  <p className="font-semibold">{formatCurrency(kprData.propertyValue)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Loan Amount</p>
-                  <p className="font-semibold">{formatCurrency(kprData.loanAmount)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Down Payment</p>
-                  <p className="font-semibold">{formatCurrency(kprData.downPayment)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Monthly Installment</p>
-                  <p className="font-semibold">{formatCurrency(kprData.monthlyInstallment)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Loan Term</p>
-                  <p className="font-semibold">{kprData.loanTermYears} years</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Interest Rate</p>
-                  <p className="font-semibold">{(kprData.interestRate * 100).toFixed(2)}%</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Main */}
+      <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+        {/* Summary Cards */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <User2 className="h-7 w-7" color={colors.blue} />
+              <p className="text-base font-semibold">Nasabah</p>
+            </div>
+            <h3 className="font-semibold text-black text-lg">{customer.name}</h3>
+            <p className="flex text-sm text-gray-600">{customer.email} • {customer.phone ?? '-'}</p>
+          </div>
 
-          {/* Customer Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <User className="h-5 w-5 mr-2" />
-                Customer Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Full Name</p>
-                  <p className="font-semibold">{kprData.userInfo.fullName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">NIK</p>
-                  <p className="font-semibold">{kprData.userInfo.nik}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="font-semibold">{kprData.userInfo.phone}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-semibold">{kprData.userInfo.email}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Occupation</p>
-                  <p className="font-semibold">{kprData.userInfo.occupation}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Monthly Income</p>
-                  <p className="font-semibold">{formatCurrency(kprData.userInfo.monthlyIncome)}</p>
-                </div>
-              </div>
-              <Separator />
-              <div>
-                <p className="text-sm text-muted-foreground">Address</p>
-                <p className="font-semibold">
-                  {kprData.userInfo.address}, {kprData.userInfo.city}, {kprData.userInfo.province} {kprData.userInfo.postalCode}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Wallet className="h-7 w-7" color={colors.blue} />
+              <p className="text-xs">Plafon</p>
+            </div>
+            <h3 className="font-semibold text-black text-lg">Rp{Math.round(loanAmount).toLocaleString('id-ID')}</h3>
+            <p>Tenor {tenor} bulan</p>
+          </div>
 
-          {/* Property Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Home className="h-5 w-5 mr-2" />
-                Property Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Property Title</p>
-                <p className="font-semibold">{kprData.propertyInfo.title}</p>
+          {/* FICO (dummy) */}
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="h-7 w-7" color={colors.blue} />
+              <p className="text-xs font-medium">FICO® Score</p>
+            </div>
+            <div className="flex justify-center">
+              <div className="relative w-40 h-20">
+                <svg viewBox="0 0 100 50" className="w-full h-full">
+                  <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#E5E7EB" strokeWidth="8" strokeLinecap="round" />
+                  <path
+                    d="M10 50 A40 40 0 0 1 90 50"
+                    fill="none"
+                    stroke={
+                      score <= 560 ? '#EF4444' :
+                      score <= 650 ? '#F97316' :
+                      score <= 700 ? '#EAB308' :
+                      score <= 750 ? '#3B82F6' : '#22C55E'
+                    }
+                    strokeWidth="8"
+                    strokeDasharray={`${((score - 300) / 550) * 126} 126`}
+                    strokeLinecap="round"
+                  />
+                  <text x="50" y="32" textAnchor="middle" fontSize="14" fontWeight="800" fill="#111827">{score}</text>
+                  <text
+                    x="50"
+                    y="44"
+                    textAnchor="middle"
+                    fontSize="7"
+                    fontWeight="600"
+                    fill={
+                      score <= 560 ? '#dc2626' :
+                      score <= 650 ? '#ea580c' :
+                      score <= 700 ? '#ca8a04' :
+                      score <= 750 ? '#2563eb' : '#16a34a'
+                    }
+                  >
+                    {score <= 560 ? 'Very Bad' :
+                     score <= 650 ? 'Bad' :
+                     score <= 700 ? 'Fair' :
+                     score <= 750 ? 'Good' : 'Excellent'}
+                  </text>
+                </svg>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Description</p>
-                <p className="text-sm">{kprData.propertyInfo.description}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Land Area</p>
-                  <p className="font-semibold">{kprData.propertyInfo.landArea} m²</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Building Area</p>
-                  <p className="font-semibold">{kprData.propertyInfo.buildingArea} m²</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Bedrooms</p>
-                  <p className="font-semibold">{kprData.propertyInfo.bedrooms}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Bathrooms</p>
-                  <p className="font-semibold">{kprData.propertyInfo.bathrooms}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </div>
+        </section>
 
-        {/* Right Column */}
-        <div className="space-y-6">
-          {/* Application Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Calendar className="h-5 w-5 mr-2" />
-                Application Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Submitted At</p>
-                <p className="font-semibold">{formatDate(kprData.submittedAt)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Current Status</p>
-                {getStatusBadge(kprData.status)}
-              </div>
-            </CardContent>
-          </Card>
+        {/* Detail Customer */}
+        <section className="border rounded-2xl p-5 bg-white shadow-sm" style={{ borderColor: colors.gray + '33' }}>
+          <h2 className="font-semibold text-black text-lg mb-4 flex items-center gap-2">
+            <User2 className="h-6 w-6 text-[#3FD8D4]" /> Detail Customer
+          </h2>
 
-          {/* Developer Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Building className="h-5 w-5 mr-2" />
-                Developer
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Company Name</p>
-                <p className="font-semibold">{kprData.developerInfo.companyName}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Contact Person</p>
-                <p className="font-semibold">{kprData.developerInfo.contactPerson}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Phone</p>
-                <p className="font-semibold">{kprData.developerInfo.phone}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Partnership Level</p>
-                <Badge variant="outline">{kprData.developerInfo.partnershipLevel}</Badge>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* KIRI */}
+            <div className="border rounded-xl p-4 bg-card shadow-sm">
+              <h3 className="font-semibold text-base mb-3 text-gray-900">Data Profil</h3>
+              <div className="space-y-2 text-sm">
+                {[
+                  ['Nama Lengkap', customer.name],
+                  ['Username', customer.username ?? '-'],
+                  ['Email', customer.email],
+                  ['Telepon', customer.phone ?? '-'],
+                  ['NIK', customer.nik ?? '-'],
+                  ['NPWP', customer.npwp ?? '-'],
+                  ['Tempat/Tgl Lahir', `${customer.birth_place ?? '-'}, ${customer.birth_date ?? '-'}`],
+                  ['Jenis Kelamin', customer.gender ?? '-'],
+                  ['Status', customer.marital_status ?? '-'],
+                  ['Alamat',
+                    `${customer.address ?? '-'}, ${customer.sub_district ?? '-'}, ${customer.district ?? '-'}, ${customer.city ?? '-'}`
+                  ],
+                  ['Provinsi', customer.province ?? '-'],
+                  ['Kode Pos', customer.postal_code ?? '-'],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="flex justify-between border-b pb-1">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-medium text-right max-w-[55%]">{value as string}</span>
+                  </div>
+                ))}
 
-          {/* Documents */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" />
-                Documents ({kprData.documents.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {kprData.documents.map((doc) => (
-                  <div key={doc.documentId} className="flex items-center justify-between p-2 border rounded">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{doc.documentType.replace('_', ' ')}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(doc.fileSize / 1024).toFixed(1)} KB
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openDocumentModal(doc)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </div>
+                <div className="flex justify-between border-t pt-2 mt-2">
+                  <span className="text-muted-foreground">Credit Score (OJK)</span>
+                  <span className={`font-medium text-xs px-2 py-0.5 rounded-full ${getCreditStatusColor(customer.credit_status)}`}>
+                    {customer.credit_status ?? '-'} (Kode {customer.credit_score ?? '-'})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* KANAN */}
+            <div className="border rounded-xl p-4 bg-card shadow-sm">
+              <h3 className="font-semibold text-base mb-3 text-gray-900">Data Pekerjaan</h3>
+              <div className="space-y-2 text-sm">
+                {[
+                  ['Pekerjaan', customer.occupation ?? '-'],
+                  ['Pendapatan Bulanan', customer.monthly_income ? `Rp ${customer.monthly_income}` : '-'],
+                  ['Nama Perusahaan', customer.company_name ?? '-'],
+                  ['Alamat Perusahaan',
+                    `${customer.company_address ?? '-'}, ${customer.company_subdistrict ?? '-'}, ${customer.company_district ?? '-'}`
+                  ],
+                  ['Kota', customer.company_city ?? '-'],
+                  ['Provinsi', customer.company_province ?? '-'],
+                  ['Kode Pos', customer.company_postal_code ?? '-'],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="flex justify-between border-b pb-1">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-medium text-right max-w-[55%]">{value as string}</span>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
+        </section>
+
+        {/* Dokumen Pendukung */}
+        <section className="border rounded-2xl p-5 bg-white shadow-sm" style={{ borderColor: colors.gray + '33' }}>
+          <h2 className="font-semibold text-black text-lg mb-4 flex items-center gap-2">
+            <FileText className="h-6 w-6 text-[#3FD8D4]" /> Dokumen Pendukung
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <DocRow title="Kartu Tanda Penduduk (KTP)" url={customer.ktp || null} onOpen={openDoc} colors={colors} />
+            <DocRow title="Slip Gaji" url={customer.slip || null} onOpen={openDoc} colors={colors} />
+          </div>
+        </section>
+
+        {/* Control Panel + Rincian Angsuran */}
+        <section className="grid lg:grid-cols-2 gap-6 items-start">
+          {/* Pengaturan KPR */}
+          <div className="rounded-2xl bg-white p-5 border max-w-[500px]" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Settings2 className="h-9 w-9" color={colors.blue} />
+              <h2 className="font-semibold text-black text-base">Pengaturan KPR</h2>
+            </div>
+
+            <div className="space-y-6 mb-4">
+              <SliderRow
+                label="Harga Properti"
+                value={`Rp${hargaProperti.toLocaleString('id-ID')}`}
+                min={100_000_000}
+                max={5_000_000_000}
+                step={10_000_000}
+                sliderValue={hargaProperti}
+                onChange={setHargaProperti}
+              />
+
+              <SliderRow
+                label="Uang Muka (DP)"
+                value={`${persenDP}% (${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(hargaProperti * (persenDP / 100))})`}
+                min={10}
+                max={80}
+                step={5}
+                sliderValue={persenDP}
+                onChange={setPersenDP}
+              />
+
+              <SliderRow
+                label="Jangka Waktu"
+                value={`${jangkaWaktu} tahun (${jangkaWaktu * 12} bulan)`}
+                min={1}
+                max={30}
+                step={1}
+                sliderValue={jangkaWaktu}
+                onChange={setJangkaWaktu}
+              />
+            </div>
+
+            {/* Multi-rate editor */}
+            <div className="mb-4 border rounded-lg p-3" style={{ borderColor: colors.gray + '33' }}>
+              <p className="text-sm font-medium mb-2 text-gray-700">Penyesuaian Multi-Rate</p>
+
+              {rateSegments.map((seg, idx) => (
+                <div key={idx} className="grid grid-cols-4 gap-2 mb-2 items-end">
+                  <NumberInput
+                    tiny label="Mulai" value={seg.start} min={1} max={tenor}
+                    onChange={(val) => setRateSegments((prev) => prev.map((s, i) => (i === idx ? { ...s, start: val } : s)))}
+                  />
+                  <NumberInput
+                    tiny label="Selesai" value={seg.end} min={seg.start} max={tenor}
+                    onChange={(val) => setRateSegments((prev) => prev.map((s, i) => (i === idx ? { ...s, end: val } : s)))}
+                  />
+                  <NumberInput
+                    tiny label="Rate (%)" step="0.01" value={seg.rate}
+                    onChange={(val) => setRateSegments((prev) => prev.map((s, i) => (i === idx ? { ...s, rate: val } : s)))}
+                  />
+                  <button
+                    onClick={() => setRateSegments((prev) => prev.filter((_, i) => i !== idx))}
+                    className="text-red-500 hover:text-red-600 flex items-center gap-1 justify-center"
+                  >
+                    <Trash2 className="h-4 w-4" /> Hapus
+                  </button>
+                </div>
+              ))}
+
+              <button
+                onClick={() => {
+                  const last = rateSegments[rateSegments.length - 1];
+                  const lastEnd = last?.end ?? 0;
+                  if (lastEnd < tenor) {
+                    const nextStart = lastEnd + 1;
+                    const nextEnd = Math.min(nextStart + 11, tenor);
+                    const nextRate = last.rate < 10 ? parseFloat((last.rate + 1).toFixed(2)) : last.rate;
+                    setRateSegments((prev) => [...prev, { start: nextStart, end: nextEnd, rate: nextRate }]);
+                  }
+                }}
+                disabled={rateSegments.length > 0 && rateSegments[rateSegments.length - 1].end >= tenor}
+                className={`mt-2 flex items-center gap-2 text-sm rounded-lg px-3 py-1 border transition
+                  ${
+                    rateSegments.length > 0 && rateSegments[rateSegments.length - 1].end >= tenor
+                      ? 'opacity-50 cursor-not-allowed bg-gray-200 border-gray-300 text-gray-500'
+                      : 'text-white bg-[#FF8500] border-[#FF8500] hover:bg-[#e67300]'
+                  }`}
+              >
+                Tambah Segmen
+              </button>
+            </div>
+          </div>
+
+          {/* Rincian Angsuran */}
+          <InstallmentTable
+            colors={colors}
+            rows={rows}
+            page={page}
+            setPage={setPage}
+            pageSize={pageSize}
+            roundIDR={(n) => Math.round(n)}
+          />
+        </section>
+
+        {/* Actions (navigate to your existing confirm pages) */}
+        <section className="flex flex-wrap gap-3 justify-end">
+          <button
+            onClick={() => router.push(`/confirm?action=reject&id=${encodeURIComponent(id)}`)}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-red-600 transition-colors"
+            style={{ background: '#dc2626' }}
+          >
+            <X className="h-5 w-5" /> Reject
+          </button>
+          <button
+            onClick={() => router.push(`/confirm?action=approve&id=${encodeURIComponent(id)}`)}
+            className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-green-600 transition-colors"
+            style={{ background: '#16a34a' }}
+          >
+            <Check className="h-5 w-5" /> Approve
+          </button>
+        </section>
+      </main>
+
+      {/* Document viewer */}
+      <ViewDocumentDialog open={docViewer.open} onOpenChange={(v) => (v ? null : closeDoc())} title={docViewer.title} imageUrl={docViewer.url} />
+
+      {/*
+        // If you don't have ViewDocumentDialog, use this quick fallback:
+        <Dialog open={docViewer.open} onOpenChange={(v) => (v ? null : closeDoc())}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader><DialogTitle>{docViewer.title}</DialogTitle></DialogHeader>
+            {docViewer.url ? (
+              <img src={docViewer.url} alt={docViewer.title} className="w-full h-auto rounded" />
+            ) : (
+              <p className="text-sm text-muted-foreground">Dokumen belum tersedia.</p>
+            )}
+          </DialogContent>
+        </Dialog>
+      */}
+    </div>
+  );
+}
+
+/* ---------- Helpers ---------- */
+
+function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail {
+  // prefer flat fields; fallback to nested userInfo if present
+  const ui = d.userInfo ?? {};
+  // try find KTP/SLIP from documents if available
+  const ktpDoc = d.documents?.find((x) => /KTP|IDENTITY/i.test(x.documentType ?? ''));
+  const slipDoc = d.documents?.find((x) => /SLIP|GAJI|INCOME/i.test(x.documentType ?? ''));
+
+  return {
+    id: String(d.id ?? d.applicationId ?? id),
+    name: d.applicantName ?? d.fullName ?? ui.fullName ?? 'Tidak Diketahui',
+    username: d.username ?? '-',
+    email: d.applicantEmail ?? d.email ?? 'unknown@example.com',
+    phone: d.applicantPhone ?? d.phone ?? ui.phone ?? '-',
+    nik: d.nik ?? ui.nik ?? '-',
+    npwp: d.npwp ?? ui['npwp' as keyof typeof ui] as any ?? '-',
+    birth_place: d.birthPlace ?? ui.birthPlace ?? '-',
+    birth_date: (d as any).birthDate ?? '-', // adjust if backend returns it
+    gender: d.gender ?? '-',
+    marital_status: d.marital_status ?? (ui as any).maritalStatus ?? '-',
+    address: d.address ?? (ui as any).address ?? '-',
+    sub_district: d.sub_district ?? '-',
+    district: d.district ?? '-',
+    city: d.city ?? (ui as any).city ?? '-',
+    province: d.province ?? (ui as any).province ?? '-',
+    postal_code: d.postal_code ?? (ui as any).postalCode ?? '-',
+
+    occupation: d.occupation ?? (ui as any).occupation ?? '-',
+    monthly_income: d.monthly_income ?? d.income ?? (ui as any).monthlyIncome ?? '-',
+    company_name: d.company_name ?? (ui as any).companyName ?? '-',
+    company_address: d.company_address ?? '-',
+    company_subdistrict: d.company_subdistrict ?? '-',
+    company_district: d.company_district ?? '-',
+    company_city: d.company_city ?? '-',
+    company_province: d.company_province ?? '-',
+    company_postal_code: d.company_postal_code ?? '-',
+
+    credit_status: d.credit_status ?? 'Lancar',
+    credit_score: d.credit_score ?? '01',
+
+    ktp: ktpDoc?.filePath ?? null,
+    slip: slipDoc?.filePath ?? null,
+  };
+}
+
+function getCreditStatusColor(status?: string) {
+  switch (status) {
+    case 'Lancar': return 'text-green-600 bg-green-100';
+    case 'Dalam Perhatian Khusus': return 'text-yellow-600 bg-yellow-100';
+    case 'Kurang Lancar': return 'text-orange-600 bg-orange-100';
+    case 'Diragukan': return 'text-red-600 bg-red-100';
+    case 'Macet': return 'text-red-700 bg-red-200';
+    default: return 'text-gray-600 bg-gray-100';
+  }
+}
+
+function SliderRow({
+  label, value, min, max, step, sliderValue, onChange,
+}: {
+  label: string; value: string; min: number; max: number; step: number;
+  sliderValue: number; onChange: (v: number) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center">
+        <label className="text-gray-700 font-medium">{label}</label>
+        <span className="font-semibold text-gray-900">{value}</span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={sliderValue}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-[#3FD8D4] cursor-pointer"
+      />
+    </div>
+  );
+}
+
+function NumberInput({
+  label, value, min, max, step, onChange, tiny = false,
+}: {
+  label: string; value: number; min?: number; max?: number; step?: string;
+  onChange: (v: number) => void; tiny?: boolean;
+}) {
+  return (
+    <label className={`text-xs ${tiny ? '' : 'block'}`}>
+      {label}
+      <input
+        type="number"
+        className="w-full border rounded px-2 py-1 mt-1 bg-white text-gray-900"
+        value={value} min={min} max={max} step={step}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+    </label>
+  );
+}
+
+function DocRow({ title, url, onOpen, colors }: { title: string; url: string | null; onOpen: (t: string, u: string | null) => void; colors: any }) {
+  return (
+    <div className="border rounded-xl p-5 shadow-sm bg-gray-50 flex items-center justify-between">
+      <p className="font-semibold text-gray-800 text-base">{title}</p>
+      <Button
+        onClick={() => onOpen(title, url)}
+        variant="outline"
+        className="text-[#0B63E5] border-[#0B63E5]/60 hover:bg-[#0B63E5]/10 font-semibold shadow-sm"
+      >
+        <Eye className="mr-2 h-4 w-4" /> Lihat
+      </Button>
+    </div>
+  );
+}
+
+function InstallmentTable({
+  colors, rows, page, setPage, pageSize, roundIDR,
+}: {
+  colors: any;
+  rows: Row[];
+  page: number;
+  setPage: (p: number) => void;
+  pageSize: number;
+  roundIDR: (n: number) => number;
+}) {
+  const maxPage = Math.max(1, Math.ceil(rows.length / pageSize));
+  const paged = rows.slice((page - 1) * pageSize, page * pageSize);
+
+  return (
+    <div className="rounded-2xl bg-white p-5 border -ml-30" style={{ borderColor: colors.gray + '33' }}>
+      <div className="flex justify-between items-center mb-3">
+        <div className="flex items-center gap-2">
+          <FileText className="h-9 w-9" color={colors.blue} />
+          <h2 className="font-semibold text-black text-base">Rincian Angsuran</h2>
         </div>
       </div>
 
-      {/* Document Modal */}
-      <Dialog open={documentModal.isOpen} onOpenChange={closeDocumentModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {documentModal.document?.documentType.replace('_', ' ')} - Document View
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {documentModal.document && (
-              <>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Document Type</p>
-                    <p className="font-medium">{documentModal.document.documentType.replace('_', ' ')}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">File Size</p>
-                    <p className="font-medium">{(documentModal.document.fileSize / 1024).toFixed(1)} KB</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Uploaded At</p>
-                    <p className="font-medium">
-                      {new Date(documentModal.document.uploadedAt).toLocaleDateString('id-ID', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                  </div>
-                </div>
+      <div className="overflow-x-auto border rounded-lg" style={{ borderColor: colors.gray + '33' }}>
+        <table className="min-w-full text-sm">
+          <thead style={{ background: colors.blue + '11', color: colors.gray }}>
+            <tr>
+              <th className="px-4 py-2">Bulan</th>
+              <th className="px-4 py-2">Pokok</th>
+              <th className="px-4 py-2">Bunga</th>
+              <th className="px-4 py-2">Angsuran</th>
+              <th className="px-4 py-2">Sisa</th>
+              <th className="px-4 py-2">Rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paged.map((r) => (
+              <tr key={r.month} className="border-t" style={{ borderColor: colors.gray + '33' }}>
+                <td className="px-4 py-2">{r.month}</td>
+                <td className="px-4 py-2">Rp{roundIDR(r.principalComponent).toLocaleString('id-ID')}</td>
+                <td className="px-4 py-2">Rp{roundIDR(r.interestComponent).toLocaleString('id-ID')}</td>
+                <td className="px-4 py-2 font-medium text-black">
+                  Rp{roundIDR(r.payment).toLocaleString('id-ID')}
+                </td>
+                <td className="px-4 py-2">Rp{roundIDR(r.balance).toLocaleString('id-ID')}</td>
+                <td className="px-4 py-2">{r.rateApplied.toFixed(2)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-                <Separator />
-
-                <div className="flex flex-col items-center space-y-4">
-                  <div className="w-full max-w-3xl">
-                    <img
-                      src={documentModal.document.filePath}
-                      alt={documentModal.document.documentType}
-                      className="w-full h-auto rounded-lg border shadow-lg"
-                      style={{ maxHeight: '70vh', objectFit: 'contain' }}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => window.open(documentModal.document.filePath, '_blank')}
-                    >
-                      Open in New Tab
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const link = document.createElement('a')
-                        link.href = documentModal.document.filePath
-                        link.download = documentModal.document.documentName
-                        link.click()
-                      }}
-                    >
-                      Download
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <div className="flex justify-between items-center mt-4 text-sm">
+        <span>Halaman {page} / {maxPage}</span>
+        <div className="flex gap-2">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage(Math.max(1, page - 1))}
+            className="px-3 py-1 rounded border disabled:opacity-40"
+            style={{ borderColor: colors.blue, color: colors.blue }}
+          >
+            Prev
+          </button>
+          <button
+            disabled={page === maxPage}
+            onClick={() => setPage(Math.min(maxPage, page + 1))}
+            className="px-3 py-1 rounded border disabled:opacity-40"
+            style={{ borderColor: colors.blue, color: colors.blue }}
+          >
+            Next
+          </button>
+        </div>
+      </div>
     </div>
-  )
+  );
+}
+
+function buildMultiSegmentSchedule(principal: number, segments: { start: number; end: number; rate: number }[]): Row[] {
+  const rows: Row[] = [];
+  let balance = principal;
+
+  for (let s = 0; s < segments.length; s++) {
+    const seg = segments[s];
+    const months = seg.end - seg.start + 1;
+    if (months <= 0 || balance <= 0) continue;
+
+    const r = seg.rate / 100 / 12;
+    const pay = r === 0 ? balance / months : (balance * r) / (1 - Math.pow(1 + r, -months));
+
+    for (let i = 0; i < months; i++) {
+      const interest = balance * r;
+      const principalComp = Math.max(0, pay - interest);
+      balance = Math.max(0, balance - principalComp);
+
+      rows.push({
+        month: seg.start + i,
+        principalComponent: principalComp,
+        interestComponent: interest,
+        payment: principalComp + interest,
+        balance,
+        rateApplied: seg.rate,
+      });
+    }
+  }
+  return rows;
 }

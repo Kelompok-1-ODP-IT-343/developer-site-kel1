@@ -1,5 +1,4 @@
-//Data diambil dari API KPR Applications
-
+// Data diambil dari API KPR Applications
 "use client"
 
 import * as React from "react"
@@ -24,18 +23,12 @@ import { getKPRApplicationsProgress } from "@/lib/coreApi"
 import { useRouter } from "next/navigation"
 import { Calculator, Settings2 } from "lucide-react"
 
-// KPR Application interface based on API response
 interface KPRApplication {
   id: number
   applicantName: string
   applicantEmail: string
   applicantPhone: string
-  aplikasiKode: string
-  namaProperti: string
-  alamat: string
-  harga: number
-  tanggal: string
-  jenis: string
+  // field lain tetap ada tapi tidak ditampilkan
 }
 
 interface ApiResponse {
@@ -48,124 +41,89 @@ interface ApiResponse {
 
 export default function ApprovalTable() {
   const router = useRouter()
-  const [kprApplications, setKprApplications] = React.useState<KPRApplication[]>([])
+  const [rawData, setRawData] = React.useState<KPRApplication[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [query, setQuery] = React.useState("")
 
-  // Fetch KPR applications data
   React.useEffect(() => {
-    const fetchKPRApplications = async () => {
+    ;(async () => {
       try {
         setLoading(true)
-        const response: ApiResponse = await getKPRApplicationsProgress()
-        if (response.success) {
-          setKprApplications(response.data)
-        } else {
-          setError(response.message || "Failed to fetch KPR applications")
-        }
-      } catch (err) {
-        console.error("Error fetching KPR applications:", err)
+        const res: ApiResponse = await getKPRApplicationsProgress()
+        if (res?.success) setRawData(res.data ?? [])
+        else setError(res?.message || "Failed to fetch KPR applications")
+      } catch (e) {
+        console.error(e)
         setError("Failed to fetch KPR applications")
       } finally {
         setLoading(false)
       }
-    }
-
-    fetchKPRApplications()
+    })()
   }, [])
 
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
+  const handleActionClick = (row: KPRApplication) => {
+    router.push(`/dashboard/detail/${row.id}`)
   }
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("id-ID", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-  }
+  // Filter seperti versi customers (berdasarkan email)
+  const filteredData = React.useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return rawData
+    return rawData.filter((app) => app.applicantEmail?.toLowerCase().includes(q))
+  }, [rawData, query])
 
-  const handleActionClick = (application: KPRApplication) => {
-    router.push(`/dashboard/detail/${application.id}`)
-  }
-
-  const columns: ColumnDef<KPRApplication>[] = [
-    {
-      accessorKey: "aplikasiKode",
-      header: () => <div className="font-semibold">Application Code</div>,
-      cell: ({ row }) => <div className="font-medium">{row.getValue("aplikasiKode")}</div>,
-    },
-    {
-      accessorKey: "applicantName",
-      header: () => <div className="font-semibold">Applicant Name</div>,
-      cell: ({ row }) => <div className="capitalize">{row.getValue("applicantName")}</div>,
-    },
-    {
-      accessorKey: "applicantEmail",
-      header: () => <div className="font-semibold">Email</div>,
-      cell: ({ row }) => <div className="lowercase">{row.getValue("applicantEmail")}</div>,
-    },
-    {
-      accessorKey: "namaProperti",
-      header: () => <div className="font-semibold">Property</div>,
-      cell: ({ row }) => <div className="font-medium">{row.getValue("namaProperti")}</div>,
-    },
-    {
-      accessorKey: "harga",
-      header: () => <div className="font-semibold">Price</div>,
-      cell: ({ row }) => (
-        <div className="text-right font-medium">{formatCurrency(row.getValue("harga"))}</div>
-      ),
-    },
-    {
-      accessorKey: "jenis",
-      header: () => <div className="font-semibold">KPR Type</div>,
-      cell: ({ row }) => <div className="font-medium">{row.getValue("jenis")}</div>,
-    },
-    {
-      accessorKey: "tanggal",
-      header: () => <div className="font-semibold">Date</div>,
-      cell: ({ row }) => (
-        <div className="font-medium">{formatDate(row.getValue("tanggal"))}</div>
-      ),
-    },
-    {
-      id: "action",
-      header: () => (
-        <div className="text-center">
-          <Calculator className="inline-block w-4 h-4 text-muted-foreground" />
-        </div>
-      ),
-      cell: ({ row }) => {
-        const application = row.original
-        return (
-          <div className="flex justify-center">
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label="Simulate"
-              onClick={() => handleActionClick(application)}
-              className="flex items-center gap-2"
-            >
-              <Settings2 className="w-4 h-4" />
-              Action
-            </Button>
-          </div>
-        )
+  // === KOLUM: Samakan dengan versi customers ===
+  const columns = React.useMemo<ColumnDef<KPRApplication>[]>(
+    () => [
+      {
+        accessorKey: "applicantName",
+        header: () => <div className="font-semibold">Name</div>,
+        cell: ({ row }) => <div className="capitalize">{row.getValue("applicantName")}</div>,
       },
-    },
-  ]
+      {
+        accessorKey: "applicantEmail",
+        header: () => <div className="font-semibold">Email</div>,
+        cell: ({ row }) => <div className="lowercase">{row.getValue("applicantEmail")}</div>,
+      },
+      {
+        accessorKey: "applicantPhone",
+        header: () => <div className="font-semibold">Phone</div>,
+        cell: ({ row }) => (
+          <div className="text-center font-medium">{row.getValue("applicantPhone")}</div>
+        ),
+      },
+      {
+        id: "action",
+        header: () => (
+          <div className="text-center">
+            <Calculator className="inline-block w-4 h-4 text-muted-foreground" />
+          </div>
+        ),
+        cell: ({ row }) => {
+          const app = row.original
+          return (
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label="Simulate"
+                onClick={() => handleActionClick(app)}
+                className="flex items-center gap-2"
+              >
+                <Settings2 className="w-4 h-4" />
+                Action
+              </Button>
+            </div>
+          )
+        },
+      },
+    ],
+    []
+  )
 
   const table = useReactTable({
-    data: kprApplications,
+    data: filteredData,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -193,19 +151,13 @@ export default function ApprovalTable() {
 
   return (
     <div className="w-full">
+      {/* Filter bar seperti customers */}
       <div className="flex items-center py-4">
         <Input
-          placeholder="Filter by applicant name or email..."
+          placeholder="Filter emails..."
           className="max-w-sm"
-          onChange={(e) => {
-            const value = e.target.value.toLowerCase()
-            const filtered = kprApplications.filter((app) =>
-              app.applicantName.toLowerCase().includes(value) ||
-              app.applicantEmail.toLowerCase().includes(value) ||
-              app.aplikasiKode.toLowerCase().includes(value)
-            )
-            table.options.data = filtered.length ? filtered : kprApplications
-          }}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
         />
       </div>
 
@@ -244,7 +196,7 @@ export default function ApprovalTable() {
                   key={row.id}
                   className="hover:bg-muted/30 transition-colors duration-150 divide-x divide-border"
                 >
-                  {/* Kolom nomor urut */}
+                  {/* Nomor urut */}
                   <TableCell className="py-3 px-4 text-sm font-medium text-center w-[60px]">
                     {index + 1}
                   </TableCell>
@@ -257,11 +209,7 @@ export default function ApprovalTable() {
                       }}
                       className={`
                         py-3 px-4 text-sm
-                        ${
-                          cell.column.id === "applicantEmail"
-                            ? "text-muted-foreground"
-                            : "font-medium"
-                        }
+                        ${cell.column.id === "applicantEmail" ? "text-muted-foreground" : "font-medium"}
                       `}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -275,7 +223,7 @@ export default function ApprovalTable() {
                   colSpan={table.getAllColumns().length + 1}
                   className="h-24 text-center text-muted-foreground"
                 >
-                  No KPR applications found.
+                  No results.
                 </TableCell>
               </TableRow>
             )}
@@ -283,6 +231,7 @@ export default function ApprovalTable() {
         </Table>
       </div>
 
+      {/* Pagination */}
       <div className="flex items-center justify-end space-x-2 py-4">
         <Button
           variant="outline"

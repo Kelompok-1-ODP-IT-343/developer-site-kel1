@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 
 // Metadata
 export const metadata: Metadata = {
-  title: "BNI KPR - Satu Atap",
+  title: "Developer - Satu Atap",
   description: "Aplikasi KPR BNI untuk memudahkan pengajuan kredit pemilikan rumah",
 }
 
