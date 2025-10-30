@@ -10,6 +10,15 @@ const coreApi = axios.create({
   },
 });
 
+// Axios instance untuk Credit Score API (Java service)
+const creditScoreApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL || "http://localhost:9090/api/v1",
+  timeout: 10000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
 // Interceptor: sisipkan Authorization jika ada token di localStorage
 coreApi.interceptors.request.use((config) => {
   try {
@@ -184,6 +193,18 @@ export const rejectKPRApplication = async (applicationId: string, rejectionReaso
     return response.data;
   } catch (error) {
     console.error("Error rejecting KPR application:", error);
+    throw error;
+  }
+};
+
+export const getCreditScore = async (userId: string) => {
+  try {
+    const response = await creditScoreApi.post(`/credit-score`, {
+      user_id: userId
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching credit score:", error);
     throw error;
   }
 };

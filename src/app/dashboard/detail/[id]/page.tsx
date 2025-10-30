@@ -8,7 +8,14 @@ import {
   User2, Wallet, BarChart3, FileText, Eye, Settings2
 } from 'lucide-react';
 import ViewDocumentDialog from '@/components/dialogs/ViewDocumentDialog';
-import { getKPRApplicationDetail } from '@/lib/coreApi';
+import ViewApprovalDetails from '@/components/dialogs/ViewApprovalDetails';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { getKPRApplicationDetail, getCreditScore, approveKPRApplication, rejectKPRApplication } from '@/lib/coreApi';
 
 /** ---------- Types from your API (minimal) ---------- */
 type KPRApplicationData = {
@@ -144,11 +151,19 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [score, setScore] = useState<number>(0);
+  const [scoreLoading, setScoreLoading] = useState(true);
   const [docViewer, setDocViewer] = useState<{ open: boolean; title: string; url: string | null }>({
     open: false,
     title: '',
     url: null,
   });
+  const [approvalDialog, setApprovalDialog] = useState<{ open: boolean; data: any | null }>({ open: false, data: null });
+  const [rejectDialog, setRejectDialog] = useState<{ open: boolean; summary: string | null }>({ open: false, summary: null });
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [reasonInput, setReasonInput] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -176,7 +191,13 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           setLoadError('Data tidak ditemukan.');
           return;
         }
-        setCustomer(mapToCustomerDetail(id, payload));
+        const customerData = mapToCustomerDetail(id, payload);
+        setCustomer(customerData);
+
+        // Fetch credit score after customer data is loaded
+        if (customerData.id) {
+          fetchCreditScore(customerData.id);
+        }
       } catch (e: any) {
         setLoadError(e?.message || 'Gagal memuat data.');
         setCustomer(null);
@@ -189,13 +210,26 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
     };
   }, [id]);
 
-  // ----- FICO dummy (no API) -----
-  const idNum = parseInt(id || '1', 10);
-  const seededRandom = (seed: number): number => {
-    const x = Math.sin(seed) * 10000;
-    return x - Math.floor(x);
+  // Fetch credit score from API
+  const fetchCreditScore = async (userId: string) => {
+    try {
+      setScoreLoading(true);
+      const data = await getCreditScore(userId);
+      
+      if (data.success && data.score) {
+        setScore(Math.round(data.score));
+      } else {
+        // Fallback to default score if API doesn't return valid data
+        setScore(650);
+      }
+    } catch (error) {
+      console.error('Error fetching credit score:', error);
+      // Fallback to default score on error
+      setScore(650);
+    } finally {
+      setScoreLoading(false);
+    }
   };
-  const score: number = Math.floor(300 + (isNaN(idNum) ? 1 : seededRandom(idNum)) * 550);
 
   // ----- KPR controls (local UI only) -----
   const [hargaProperti, setHargaProperti] = useState(850_000_000);
@@ -291,50 +325,54 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
             <p>Tenor {tenor} bulan</p>
           </div>
 
-          {/* FICO (dummy) */}
+          {/* FICO (from API) */}
           <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + '33' }}>
             <div className="flex items-center gap-2 mb-3">
               <BarChart3 className="h-7 w-7" color={colors.blue} />
               <p className="text-xs font-medium">FICO® Score</p>
             </div>
             <div className="flex justify-center">
-              <div className="relative w-40 h-20">
-                <svg viewBox="0 0 100 50" className="w-full h-full">
-                  <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#E5E7EB" strokeWidth="8" strokeLinecap="round" />
-                  <path
-                    d="M10 50 A40 40 0 0 1 90 50"
-                    fill="none"
-                    stroke={
-                      score <= 560 ? '#EF4444' :
-                      score <= 650 ? '#F97316' :
-                      score <= 700 ? '#EAB308' :
-                      score <= 750 ? '#3B82F6' : '#22C55E'
-                    }
-                    strokeWidth="8"
-                    strokeDasharray={`${((score - 300) / 550) * 126} 126`}
-                    strokeLinecap="round"
-                  />
-                  <text x="50" y="32" textAnchor="middle" fontSize="14" fontWeight="800" fill="#111827">{score}</text>
-                  <text
-                    x="50"
-                    y="44"
-                    textAnchor="middle"
-                    fontSize="7"
-                    fontWeight="600"
-                    fill={
-                      score <= 560 ? '#dc2626' :
-                      score <= 650 ? '#ea580c' :
-                      score <= 700 ? '#ca8a04' :
-                      score <= 750 ? '#2563eb' : '#16a34a'
-                    }
-                  >
-                    {score <= 560 ? 'Very Bad' :
-                     score <= 650 ? 'Bad' :
-                     score <= 700 ? 'Fair' :
-                     score <= 750 ? 'Good' : 'Excellent'}
-                  </text>
-                </svg>
-              </div>
+              {scoreLoading ? (
+                <div className="text-sm text-muted-foreground">Loading score...</div>
+              ) : (
+                <div className="relative w-40 h-20">
+                  <svg viewBox="0 0 100 50" className="w-full h-full">
+                    <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#E5E7EB" strokeWidth="8" strokeLinecap="round" />
+                    <path
+                      d="M10 50 A40 40 0 0 1 90 50"
+                      fill="none"
+                      stroke={
+                        score <= 560 ? '#EF4444' :
+                        score <= 650 ? '#F97316' :
+                        score <= 700 ? '#EAB308' :
+                        score <= 750 ? '#3B82F6' : '#22C55E'
+                      }
+                      strokeWidth="8"
+                      strokeDasharray={`${((score - 300) / 550) * 126} 126`}
+                      strokeLinecap="round"
+                    />
+                    <text x="50" y="32" textAnchor="middle" fontSize="14" fontWeight="800" fill="#111827">{score}</text>
+                    <text
+                      x="50"
+                      y="44"
+                      textAnchor="middle"
+                      fontSize="7"
+                      fontWeight="600"
+                      fill={
+                        score <= 560 ? '#dc2626' :
+                        score <= 650 ? '#ea580c' :
+                        score <= 700 ? '#ca8a04' :
+                        score <= 750 ? '#2563eb' : '#16a34a'
+                      }
+                    >
+                      {score <= 560 ? 'Very Bad' :
+                       score <= 650 ? 'Bad' :
+                       score <= 700 ? 'Fair' :
+                       score <= 750 ? 'Good' : 'Excellent'}
+                    </text>
+                  </svg>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -521,27 +559,157 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           />
         </section>
 
-        {/* Actions (navigate to your existing confirm pages) */}
+        {/* Actions (integrated approve/reject with reason modal) */}
         <section className="flex flex-wrap gap-3 justify-end">
           <button
-            onClick={() => router.push(`/confirm?action=reject&id=${encodeURIComponent(id)}`)}
+            disabled={actionLoading}
+            onClick={() => {
+              setReasonInput("");
+              setShowRejectModal(true);
+            }}
             className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-red-600 transition-colors"
             style={{ background: '#dc2626' }}
           >
             <X className="h-5 w-5" /> Reject
           </button>
           <button
-            onClick={() => router.push(`/confirm?action=approve&id=${encodeURIComponent(id)}`)}
+            disabled={actionLoading}
+            onClick={() => {
+              setReasonInput("");
+              setShowApproveModal(true);
+            }}
             className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-green-600 transition-colors"
             style={{ background: '#16a34a' }}
           >
             <Check className="h-5 w-5" /> Approve
           </button>
         </section>
+      {/* Approve Modal */}
+      <Dialog open={showApproveModal} onOpenChange={(v) => setShowApproveModal(v)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alasan Persetujuan Kredit</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <textarea
+              className="w-full border rounded p-2 min-h-[60px]"
+              placeholder="Masukkan alasan persetujuan..."
+              value={reasonInput}
+              onChange={e => setReasonInput(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button
+              disabled={actionLoading || !reasonInput.trim()}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  const result = await approveKPRApplication(id, reasonInput.trim());
+                  setShowApproveModal(false);
+                  setApprovalDialog({ open: true, data: {
+                    application_id: id,
+                    customer_name: customer?.name ?? "",
+                    property_name: "-", // Fill with actual property if available
+                    address: customer?.address ?? "",
+                    price: loanAmount,
+                    status: "Approved",
+                    approval_date: new Date().toISOString(),
+                    reason: reasonInput.trim(),
+                    apiResult: result,
+                  }});
+                } catch (err: any) {
+                  setShowApproveModal(false);
+                  setApprovalDialog({ open: true, data: {
+                    application_id: id,
+                    customer_name: customer?.name ?? "",
+                    property_name: "-",
+                    address: customer?.address ?? "",
+                    price: loanAmount,
+                    status: "Error",
+                    approval_date: new Date().toISOString(),
+                    error: err?.message || "Gagal menyetujui pengajuan.",
+                    reason: reasonInput.trim(),
+                  }});
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
+            >{actionLoading ? "Memproses..." : "Approve"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Modal */}
+      <Dialog open={showRejectModal} onOpenChange={(v) => setShowRejectModal(v)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Alasan Penolakan Kredit</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <textarea
+              className="w-full border rounded p-2 min-h-[60px]"
+              placeholder="Masukkan alasan penolakan..."
+              value={reasonInput}
+              onChange={e => setReasonInput(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button
+              disabled={actionLoading || !reasonInput.trim()}
+              onClick={async () => {
+                setActionLoading(true);
+                try {
+                  const result = await rejectKPRApplication(id, reasonInput.trim());
+                  setShowRejectModal(false);
+                  setRejectDialog({ open: true, summary: result?.message || "Pengajuan kredit telah ditolak." });
+                } catch (err: any) {
+                  setShowRejectModal(false);
+                  setRejectDialog({ open: true, summary: err?.message || "Gagal menolak pengajuan." });
+                } finally {
+                  setActionLoading(false);
+                }
+              }}
+            >{actionLoading ? "Memproses..." : "Reject"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       </main>
 
       {/* Document viewer */}
       <ViewDocumentDialog open={docViewer.open} onOpenChange={(v) => (v ? null : closeDoc())} title={docViewer.title} imageUrl={docViewer.url} />
+
+      {/* Approval details dialog */}
+      {approvalDialog.open && (
+        <ViewApprovalDetails
+          open={approvalDialog.open}
+          onOpenChange={(v) => {
+            setApprovalDialog({ open: false, data: null });
+            if (v === false) router.push("/dashboard");
+          }}
+          data={approvalDialog.data}
+        />
+      )}
+
+      {/* Rejection summary dialog */}
+      {rejectDialog.open && (
+        <Dialog open={rejectDialog.open} onOpenChange={(v) => {
+          setRejectDialog({ open: false, summary: null });
+          if (v === false) router.push("/dashboard");
+        }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Pengajuan Kredit Ditolak</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 text-sm text-muted-foreground">{rejectDialog.summary}</div>
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => {
+                setRejectDialog({ open: false, summary: null });
+                router.push("/dashboard");
+              }}>Kembali ke Dashboard</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/*
         // If you don't have ViewDocumentDialog, use this quick fallback:
@@ -569,7 +737,7 @@ function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail 
   const slipDoc = d.documents?.find(x => /SLIP|GAJI|INCOME/i.test(x.documentType ?? ''));
 
   return {
-    id: String(d.id ?? d.applicationId ?? id),
+    id: String((ui as any).userId ?? d.id ?? d.applicationId ?? id),
     name: d.applicantName ?? d.fullName ?? ui.fullName ?? 'Tidak Diketahui',
     username: d.username ?? ui['username' as keyof typeof ui] as any ?? '-', // optional
     email: d.applicantEmail ?? d.email ?? (ui as any).email ?? 'unknown@example.com',   // <-- add ui.email
