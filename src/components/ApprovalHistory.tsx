@@ -107,18 +107,20 @@ export default function ApprovalHistory() {
     fetchApprovalHistory()
   }, [])
 
-  // Transform API data to table format
+  // Transform API data to table format and exclude SUBMITTED status
   const transformedData: HistoryRow[] = React.useMemo(() => {
-    return data.map((item) => ({
-      id: item.id.toString(),
-      application_id: item.aplikasiKode,
-      customer_name: "N/A", // Not provided in API response
-      property_name: item.namaRumah,
-      address: item.lokasiRumah,
-      price: item.jumlahPinjaman,
-      status: item.statusPengajuan.toLowerCase(),
-      approval_date: item.tanggalPengajuan,
-    }))
+    return data
+      .filter((item) => item.statusPengajuan.toUpperCase() !== 'SUBMITTED')
+      .map((item) => ({
+        id: item.id.toString(),
+        application_id: item.aplikasiKode,
+        customer_name: "N/A", // Not provided in API response
+        property_name: item.namaRumah,
+        address: item.lokasiRumah,
+        price: item.jumlahPinjaman,
+        status: item.statusPengajuan.toLowerCase(),
+        approval_date: item.tanggalPengajuan,
+      }))
   }, [data])
 
   const filteredData = React.useMemo(() => {

@@ -1,4 +1,4 @@
-// Data diambil dari API KPR Applications
+// app/(dashboard)/approval-table.tsx
 "use client"
 
 import * as React from "react"
@@ -19,29 +19,82 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getKPRApplicationsProgress } from "@/lib/coreApi"
 import { useRouter } from "next/navigation"
 import { Calculator, Settings2 } from "lucide-react"
 
-interface KPRApplication {
+// ⬇️ your existing API
+import { getKPRApplicationsProgress } from "@/lib/coreApi"
+
+// ========= Helpers =========
+type UnifiedRow = {
   id: number
+  aplikasiKode: string            // ID Pengajuan
   applicantName: string
-  applicantEmail: string
-  applicantPhone: string
-  // field lain tetap ada tapi tidak ditampilkan
+  applicantEmail?: string
+  applicantPhone?: string
+  namaProperti?: string
+  tanggal?: string | null         // ISO string preferred
+  status?: string                  // Status aplikasi
 }
 
-interface ApiResponse {
-  success: boolean
-  message: string
-  data: KPRApplication[]
-  timestamp: string
-  path: string | null
+// Best-effort normalization from any API item to UnifiedRow
+function normalizeItem(item: any): UnifiedRow {
+  return {
+    id: Number(item.id ?? item.applicationId ?? 0),
+    aplikasiKode:
+      item.aplikasiKode ??
+      item.applicationNumber ??
+      item.application_code ??
+      "-",
+    applicantName:
+      item.applicantName ??
+      item.name ??
+      item.fullName ??
+      "-",
+    applicantEmail:
+      item.applicantEmail ??
+      item.email ??
+      "",
+    applicantPhone:
+      item.applicantPhone ??
+      item.phone ??
+      item.phoneNumber ??
+      "",
+    namaProperti:
+      item.namaProperti ??
+      item.propertyName ??
+      item.developerName ??
+      item.propertyTitle ??
+      "-",
+    tanggal:
+      item.tanggal ??
+      item.submittedAt ??
+      item.createdAt ??
+      item.reviewedAt ??
+      null,
+    status:
+      item.status ??
+      item.applicationStatus ??
+      "",
+  }
 }
 
+function formatDate(dateString?: string | null) {
+  if (!dateString) return "-"
+  const d = new Date(dateString)
+  if (isNaN(d.getTime())) return "-"
+  return d.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
+}
+
+// ========= Component =========
 export default function ApprovalTable() {
   const router = useRouter()
-  const [rawData, setRawData] = React.useState<KPRApplication[]>([])
+  const [raw, setRaw] = React.useState<any[]>([])
+  const [rows, setRows] = React.useState<UnifiedRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState("")
@@ -50,9 +103,21 @@ export default function ApprovalTable() {
     ;(async () => {
       try {
         setLoading(true)
-        const res: ApiResponse = await getKPRApplicationsProgress()
-        if (res?.success) setRawData(res.data ?? [])
-        else setError(res?.message || "Failed to fetch KPR applications")
+        setError(null)
+        const res = await getKPRApplicationsProgress()
+        if (res?.success) {
+          const list: any[] = Array.isArray(res.data) ? res.data : []
+          setRaw(list)
+          // Filter to show only PENDING status applications
+          const normalizedList = list.map(normalizeItem)
+          const pendingOnly = normalizedList.filter((item) => {
+            const status = (item.status ?? "").toUpperCase()
+            return status.includes("SUBMITTED")
+          })
+          setRows(pendingOnly)
+        } else {
+          setError(res?.message || "Failed to fetch KPR applications")
+        }
       } catch (e) {
         console.error(e)
         setError("Failed to fetch KPR applications")
@@ -62,35 +127,58 @@ export default function ApprovalTable() {
     })()
   }, [])
 
-  const handleActionClick = (row: KPRApplication) => {
-    router.push(`/dashboard/detail/${row.id}`)
-  }
-
-  // Filter seperti versi customers (berdasarkan email)
+  // Filter: email if available, else by aplikasiKode
   const filteredData = React.useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return rawData
-    return rawData.filter((app) => app.applicantEmail?.toLowerCase().includes(q))
-  }, [rawData, query])
+    if (!q) return rows
+    return rows.filter((r) => {
+      const email = (r.applicantEmail ?? "").toLowerCase()
+      const kode = (r.aplikasiKode ?? "").toLowerCase()
+      return email.includes(q) || kode.includes(q)
+    })
+  }, [rows, query])
 
-  // === KOLUM: Samakan dengan versi customers ===
-  const columns = React.useMemo<ColumnDef<KPRApplication>[]>(
+  const handleActionClick = (row: UnifiedRow) => {
+    // Pick one route style; adjust if your detail route differs:
+    // Option A: detail by id
+    router.push(`/dashboard/detail/${row.id}`)
+
+    // Option B (alternative): simulation page with query param
+    // router.push(`/dashboard/simulate?id=${row.id}`)
+  }
+
+  // === Columns (unified) ===
+  const columns = React.useMemo<ColumnDef<UnifiedRow>[]>(
     () => [
+      {
+        accessorKey: "aplikasiKode",
+        header: () => <div className="font-semibold">ID Pengajuan</div>,
+        cell: ({ row }) => <div className="capitalize">{row.getValue("aplikasiKode")}</div>,
+      },
       {
         accessorKey: "applicantName",
         header: () => <div className="font-semibold">Name</div>,
         cell: ({ row }) => <div className="capitalize">{row.getValue("applicantName")}</div>,
       },
       {
-        accessorKey: "applicantEmail",
-        header: () => <div className="font-semibold">Email</div>,
-        cell: ({ row }) => <div className="lowercase">{row.getValue("applicantEmail")}</div>,
-      },
-      {
         accessorKey: "applicantPhone",
         header: () => <div className="font-semibold">Phone</div>,
         cell: ({ row }) => (
-          <div className="text-center font-medium">{row.getValue("applicantPhone")}</div>
+          <div className="text-center font-medium">
+            {(row.getValue("applicantPhone") as string) || "-"}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "namaProperti",
+        header: () => <div className="font-semibold">Nama Properti</div>,
+        cell: ({ row }) => <div className="font-medium">{row.getValue("namaProperti") || "-"}</div>,
+      },
+      {
+        accessorKey: "tanggal",
+        header: () => <div className="font-semibold">Tanggal</div>,
+        cell: ({ row }) => (
+          <div className="text-center">{formatDate(row.getValue("tanggal") as string | null)}</div>
         ),
       },
       {
@@ -101,14 +189,14 @@ export default function ApprovalTable() {
           </div>
         ),
         cell: ({ row }) => {
-          const app = row.original
+          const item = row.original
           return (
             <div className="flex justify-center">
               <Button
                 variant="outline"
                 size="sm"
                 aria-label="Simulate"
-                onClick={() => handleActionClick(app)}
+                onClick={() => handleActionClick(item)}
                 className="flex items-center gap-2"
               >
                 <Settings2 className="w-4 h-4" />
@@ -151,10 +239,10 @@ export default function ApprovalTable() {
 
   return (
     <div className="w-full">
-      {/* Filter bar seperti customers */}
+      {/* Filter bar (email / ID Pengajuan) */}
       <div className="flex items-center py-4">
         <Input
-          placeholder="Filter emails..."
+          placeholder="Filter by email or ID Pengajuan..."
           className="max-w-sm"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
