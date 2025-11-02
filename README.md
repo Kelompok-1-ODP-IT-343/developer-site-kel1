@@ -34,3 +34,18 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Authentication and Refresh Tokens
+
+- The app expects the backend to return `token` (access token) and `refreshToken` on successful login/OTP verification.
+- Access tokens are attached to API calls via an Axios interceptor in `src/lib/coreApi.ts`.
+- When an API call returns 401, the interceptor attempts to refresh using `/auth/refresh` with body `{ refreshToken }`.
+- Refresh tokens are treated with a 24-hour lifetime on the client. We store a `refresh_expires_at` timestamp and stop refreshing after it elapses; users are redirected to `/login`.
+- Logout clears both tokens and the refresh metadata.
+
+Endpoints used (relative to `NEXT_PUBLIC_API_URL`):
+- `POST /auth/login` or `POST /auth/verify-otp` to obtain tokens
+- `POST /auth/refresh` to refresh the access token
+- `POST /auth/logout` to end the session
+
+If the refresh endpoint also returns a new `refreshToken`, it will be persisted and the 24-hour window is reset.

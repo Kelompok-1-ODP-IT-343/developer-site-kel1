@@ -5,7 +5,8 @@ import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
   Check, X, XCircle, Trash2,
-  User2, Wallet, BarChart3, FileText, Eye, Settings2
+  User2, Wallet, BarChart3, FileText, Eye, Settings2,
+  CheckCircle2, AlertCircle, TrendingUp, Lightbulb
 } from 'lucide-react';
 import ViewDocumentDialog from '@/components/dialogs/ViewDocumentDialog';
 import ViewApprovalDetails from '@/components/dialogs/ViewApprovalDetails';
@@ -15,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { getKPRApplicationDetail, getCreditScore, approveKPRApplication, rejectKPRApplication } from '@/lib/coreApi';
+import { getKPRApplicationDetail, getCreditScore, approveKPRApplication, rejectKPRApplication, getCreditRecommendation } from '@/lib/coreApi';
 
 /** ---------- Types from your API (minimal) ---------- */
 type KPRApplicationData = {
@@ -138,6 +139,30 @@ type RateSegment = {
   label?: string;
 };
 
+type CreditRecommendation = {
+  decision: 'APPROVE' | 'REJECT';
+  confidence: number;
+  reasons: string[];
+  summary: string;
+  key_factors?: {
+    derived?: {
+      dti?: number;
+      fico_score?: number;
+      ltv?: number;
+    };
+  };
+};
+
+type RecommendationResponse = {
+  success: boolean;
+  recommendation: CreditRecommendation;
+  credit_score_used?: {
+    score: number;
+    breakdown?: any;
+  };
+  model_used?: string;
+};
+
 export default function ApprovalDetailIntegrated(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -153,6 +178,7 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [score, setScore] = useState<number>(0);
   const [scoreLoading, setScoreLoading] = useState(true);
+  const [application, setApplication] = useState<any | null>(null); // raw app detail with loanAmount, loanTermYears
   const [docViewer, setDocViewer] = useState<{ open: boolean; title: string; url: string | null }>({
     open: false,
     title: '',
@@ -164,6 +190,11 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [reasonInput, setReasonInput] = useState("");
+  
+  // Credit Recommendation State
+  const [recommendation, setRecommendation] = useState<CreditRecommendation | null>(null);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
+  const [recommendationError, setRecommendationError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -191,13 +222,17 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           setLoadError('Data tidak ditemukan.');
           return;
         }
-        const customerData = mapToCustomerDetail(id, payload);
+  const customerData = mapToCustomerDetail(id, payload);
         setCustomer(customerData);
+  setApplication(payload as any);
 
         // Fetch credit score after customer data is loaded
         if (customerData.id) {
           fetchCreditScore(customerData.id);
         }
+
+  // Fetch credit recommendation (centralized in core API)
+  fetchCreditRecommendation(id);
       } catch (e: any) {
         setLoadError(e?.message || 'Gagal memuat data.');
         setCustomer(null);
@@ -228,6 +263,26 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
       setScore(650);
     } finally {
       setScoreLoading(false);
+    }
+  };
+
+  // Fetch credit recommendation from API (centralized in core API)
+  const fetchCreditRecommendation = async (applicationId: string) => {
+    try {
+      setRecommendationLoading(true);
+      setRecommendationError(null);
+
+      const data: RecommendationResponse = await getCreditRecommendation(applicationId);
+      if (data?.success && data?.recommendation) {
+        setRecommendation(data.recommendation);
+      } else {
+        throw new Error('Invalid recommendation response');
+      }
+    } catch (error: any) {
+      console.error('Error fetching credit recommendation:', error);
+      setRecommendationError(error?.message || 'Failed to fetch credit recommendation');
+    } finally {
+      setRecommendationLoading(false);
     }
   };
 
@@ -321,8 +376,16 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
               <Wallet className="h-7 w-7" color={colors.blue} />
               <p className="text-xs">Plafon</p>
             </div>
-            <h3 className="font-semibold text-black text-lg">Rp{Math.round(loanAmount).toLocaleString('id-ID')}</h3>
-            <p>Tenor {tenor} bulan</p>
+            <h3 className="font-semibold text-black text-lg">
+              Rp{Math.round((application?.loanAmount ?? loanAmount) as number).toLocaleString('id-ID')}
+            </h3>
+            <p>
+              Tenor {(() => {
+                const lt = Number(application?.loanTermYears);
+                if (!lt || Number.isNaN(lt)) return tenor;
+                return lt > 50 ? lt : lt * 12;
+              })()} bulan
+            </p>
           </div>
 
           {/* FICO (from API) */}
@@ -377,6 +440,107 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           </div>
         </section>
 
+        {/* Credit Approval Recommendation */}
+        <section className="border rounded-2xl p-5 bg-white shadow-sm" style={{ borderColor: colors.gray + '33' }}>
+          <h2 className="font-semibold text-black text-lg mb-4 flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-[#3FD8D4]" /> Credit Approval Recommendation
+          </h2>
+
+          {recommendationLoading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#3FD8D4] mb-4"></div>
+              <p className="text-sm text-muted-foreground">Generating credit recommendation...</p>
+            </div>
+          ) : recommendationError ? (
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-red-50 border border-red-200">
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-red-900">Failed to load recommendation</p>
+                <p className="text-xs text-red-700 mt-1">{recommendationError}</p>
+              </div>
+            </div>
+          ) : recommendation ? (
+            <div className="space-y-4">
+              {/* Decision & Confidence */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Decision */}
+                <div className={`p-4 rounded-xl border-2 ${
+                  recommendation.decision === 'APPROVE'
+                    ? 'bg-green-50 border-green-300'
+                    : 'bg-red-50 border-red-300'
+                }`}>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2">
+                      {recommendation.decision === 'APPROVE' ? (
+                        <CheckCircle2 className="h-6 w-6 text-green-600" />
+                      ) : (
+                        <XCircle className="h-6 w-6 text-red-600" />
+                      )}
+                      <h3 className="font-semibold text-base">Decision</h3>
+                    </div>
+                    <span className={`text-lg font-bold ${
+                      recommendation.decision === 'APPROVE' ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                      {recommendation.decision}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Confidence */}
+                <div className="p-4 rounded-xl border-2 bg-blue-50 border-blue-300">
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="h-6 w-6 text-blue-600" />
+                      <h3 className="font-semibold text-base">Confidence</h3>
+                    </div>
+                    <span className="text-lg font-bold text-blue-700">
+                      {(recommendation.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  {recommendation.key_factors?.derived && (
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-blue-700">
+                      <div>DTI: {recommendation.key_factors.derived.dti?.toFixed(2)}</div>
+                      <div>LTV: {recommendation.key_factors.derived.ltv ? (recommendation.key_factors.derived.ltv * 100).toFixed(0) + '%' : '-'}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="p-4 rounded-xl border bg-gradient-to-br from-blue-50 to-purple-50">
+                <div className="flex items-center gap-2 mb-3">
+                  <Lightbulb className="h-5 w-5 text-purple-600" />
+                  <h3 className="font-semibold text-base text-gray-900">Summary</h3>
+                </div>
+                <div
+                  className="text-sm text-gray-700 leading-relaxed whitespace-pre-line"
+                  dangerouslySetInnerHTML={{ __html: toHtmlWithBold(recommendation.summary) }}
+                />
+              </div>
+
+              {/* Reasons */}
+              <div className="p-4 rounded-xl border bg-gray-50">
+                <h3 className="font-semibold text-base text-gray-900 mb-3 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-gray-600" />
+                  Key Reasons
+                </h3>
+                <ul className="space-y-2">
+                  {recommendation.reasons.map((reason, index) => (
+                    <li key={index} className="flex items-start gap-2 text-sm text-gray-700">
+                      <span className="text-[#3FD8D4] font-bold mt-0.5">•</span>
+                      <span dangerouslySetInnerHTML={{ __html: toHtmlWithBold(reason) }} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              No recommendation available
+            </div>
+          )}
+        </section>
+
         {/* Detail Customer */}
         <section className="border rounded-2xl p-5 bg-white shadow-sm" style={{ borderColor: colors.gray + '33' }}>
           <h2 className="font-semibold text-black text-lg mb-4 flex items-center gap-2">
@@ -410,12 +574,6 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
                   </div>
                 ))}
 
-                <div className="flex justify-between border-t pt-2 mt-2">
-                  <span className="text-muted-foreground">Credit Score (OJK)</span>
-                  <span className={`font-medium text-xs px-2 py-0.5 rounded-full ${getCreditStatusColor(customer.credit_status)}`}>
-                    {customer.credit_status ?? '-'} (Kode {customer.credit_score ?? '-'})
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -729,6 +887,25 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
 }
 
 /* ---------- Helpers ---------- */
+
+function escapeHtml(str: string) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// Minimal markdown: support **bold** and preserve line breaks
+function toHtmlWithBold(md: string | undefined | null): string {
+  if (!md) return "";
+  const escaped = escapeHtml(md);
+  // Replace **text** with <strong>text</strong>
+  const withBold = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  // Convert double spaces/new lines to <br/>
+  return withBold.replace(/\n/g, "<br/>");
+}
 
 function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail {
   const ui = d.userInfo ?? {};

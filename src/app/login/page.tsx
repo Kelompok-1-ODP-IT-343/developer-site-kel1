@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginBlueprint } from '@/services/auth';
+import { initiateLogin, verifyOtpLogin } from '@/services/auth';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -19,15 +19,16 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
+  const [savedIdentifier, setSavedIdentifier] = useState('');
+  const [otp, setOtp] = useState('');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
-    const formData = new FormData(e.target as HTMLFormElement);
-    const identifier = formData.get('identifier') as string;
-    const password = formData.get('password') as string;
 
     if (!identifier || !password) {
       setError('Please enter both Developer ID and password');
@@ -36,17 +37,18 @@ export default function LoginPage() {
     }
 
     try {
-      const result = await loginBlueprint({ identifier, password });
-      if (result.success) {
-        // Redirect to dashboard only if login is successful
-        router.push('/dashboard');
+      const res = await initiateLogin({ identifier, password });
+      if (!res.success) {
+        setError(res.message || 'Failed to login. Please check your credentials.');
+        return;
+      }
+      if (res.requiresOtp) {
+        setSavedIdentifier(identifier);
+        setStep('otp');
+        setOtp('');
       } else {
-        // Show specific error messages
-        if (result.message && result.message.includes('Access denied')) {
-          setError('Invalid credentials. Please check your Developer ID and password.');
-        } else {
-          setError(result.message || 'Failed to login. Please check your credentials.');
-        }
+        // Logged in without OTP (fallback behavior)
+        router.push('/dashboard');
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -59,6 +61,35 @@ export default function LoginPage() {
       } else {
         setError(err?.response?.data?.message || 'An error occurred while logging in. Please try again.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!savedIdentifier) {
+      setError('Missing identifier. Please restart login.');
+      setStep('credentials');
+      return;
+    }
+    if (!otp || otp.length !== 6) {
+      setError('Please enter the 6-digit OTP.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await verifyOtpLogin({ identifier: savedIdentifier, otp });
+      if (res.success) {
+        router.push('/dashboard');
+      } else {
+        setError(res.message || 'Invalid OTP.');
+      }
+    } catch (err: any) {
+      console.error('Verify OTP error:', err);
+      setError(err?.response?.data?.message || 'Failed to verify OTP.');
     } finally {
       setLoading(false);
     }
@@ -83,47 +114,98 @@ export default function LoginPage() {
               BNI KPR - Satu Atap
             </CardTitle>
             <CardDescription className="text-gray-500 text-sm">
-              Please enter your Developer ID and password to login.
+              {step === 'credentials'
+                ? 'Please enter your Developer ID and password to login.'
+                : 'Enter the 6-digit OTP sent to your registered contact.'}
             </CardDescription>
           </CardHeader>
 
           <CardContent>
-            <form onSubmit={handleLogin} className="flex flex-col gap-6">
-              {error && (
+            {step === 'credentials' ? (
+              <form onSubmit={handleLogin} className="flex flex-col gap-6">
+                {error && (
                 <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">
                   {error}
                 </div>
-              )}
-              <div className="grid gap-2">
-                <Label htmlFor="identifier">Developer ID</Label>
-                <Input
-                  id="identifier"
-                  name="identifier"
-                  type="text"
-                  placeholder="Enter your Developer ID"
-                  required
+                )}
+                <div className="grid gap-2">
+                  <Label htmlFor="identifier">Developer ID</Label>
+                  <Input
+                    id="identifier"
+                    name="identifier"
+                    type="text"
+                    placeholder="Enter your Developer ID"
+                    required
+                    disabled={loading}
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    required
+                    disabled={loading}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                <Button
+                  type="submit"
                   disabled={loading}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  required
-                  disabled={loading}
-                />
-              </div>
-              <Button 
-                type="submit" 
-                disabled={loading} 
-                className="w-full bg-[#3FD8D4] hover:bg-[#2BB8B4] text-white font-semibold"
-              >
-                {loading ? 'Logging in...' : 'Login'}
-              </Button>
-            </form>
+                  className="w-full bg-[#3FD8D4] hover:bg-[#2BB8B4] text-white font-semibold"
+                >
+                  {loading ? 'Signing in...' : 'Sign in'}
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="flex flex-col gap-6">
+                {error && (
+                  <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">
+                    {error}
+                  </div>
+                )}
+                <div className="grid gap-2">
+                  <Label htmlFor="otp">OTP Code</Label>
+                  <Input
+                    id="otp"
+                    name="otp"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    placeholder="Enter 6-digit OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                    disabled={loading}
+                  />
+                  <p className="text-xs text-gray-500">We sent an OTP to the contact registered for {savedIdentifier}.</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={loading}
+                    className="flex-1"
+                    onClick={() => { setStep('credentials'); setOtp(''); setError(''); }}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 bg-[#3FD8D4] hover:bg-[#2BB8B4] text-white font-semibold"
+                  >
+                    {loading ? 'Verifying...' : 'Verify OTP'}
+                  </Button>
+                </div>
+              </form>
+            )}
           </CardContent>
 
           <CardFooter className="text-center text-sm text-gray-500">
