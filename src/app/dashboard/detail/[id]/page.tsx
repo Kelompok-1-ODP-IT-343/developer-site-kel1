@@ -173,6 +173,9 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
     (params?.id as string | undefined) ??
     (searchParams.get('id') ?? '');
 
+  // Support reading explicit applicationNumber from query; fallback to id
+  const applicationNumber = (searchParams.get('applicationNumber') ?? id) as string;
+
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -305,6 +308,21 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
 
   const colors = { blue: '#3FD8D4', gray: '#757575', orange: '#FF8500' } as const;
 
+  // helpers
+  const formatIDR = (v?: number | string | null) => {
+    if (v === null || v === undefined || v === '') return '-';
+    const n = typeof v === 'string' ? Number(v) : v;
+    if (Number.isNaN(n as number)) return String(v);
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n as number);
+  };
+  const formatPct = (v?: number | null) => (v === null || v === undefined ? '-' : `${v}%`);
+  const formatDate = (s?: string | null) => {
+    if (!s) return '-';
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+    return new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  };
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-sm text-muted-foreground">
@@ -361,25 +379,45 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
       {/* Main */}
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Summary Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + '33' }}>
-            <div className="flex items-center gap-2 mb-1">
-              <User2 className="h-7 w-7" color={colors.blue} />
-              <p className="text-base font-semibold">Nasabah</p>
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Aplikasi */}
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col items-center justify-center text-center min-h-[160px]" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 justify-center">
+              <FileText className="h-6 w-6" color={colors.blue} />
+              <p className="text-sm font-semibold text-gray-700 leading-none">Aplikasi</p>
             </div>
-            <h3 className="font-semibold text-black text-lg">{customer.name}</h3>
-            <p className="flex text-sm text-gray-600">{customer.email} • {customer.phone ?? '-'}</p>
+            <div className="text-sm space-y-1 text-gray-700">
+              <p>
+                <span className="text-gray-500">Nomor Aplikasi: </span>
+                <span className="font-semibold text-black">{(application as any)?.applicationNumber ?? applicationNumber ?? (application as any)?.applicationId ?? '-'}</span>
+              </p>
+              <p>
+                <span className="text-gray-500">Status: </span>
+                <span className="font-semibold text-black">{(application as any)?.status ?? (application as any)?.applicationStatus ?? '-'}</span>
+              </p>
+            </div>
+          </div>
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col items-center justify-center text-center min-h-[160px]" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 mb-2 justify-center">
+              <User2 className="h-7 w-7" color={colors.blue} />
+              <p className="text-sm font-semibold text-gray-700">Nasabah</p>
+            </div>
+            <h3 className="font-semibold text-black text-xl">{customer.name}</h3>
+            <div className="text-sm text-gray-600 space-y-0.5">
+              <p>{customer.email}</p>
+              <p>{customer.phone ?? '-'}</p>
+            </div>
           </div>
 
-          <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + '33' }}>
-            <div className="flex items-center gap-2 mb-1">
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col items-center justify-center text-center min-h-[160px]" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 mb-2 justify-center">
               <Wallet className="h-7 w-7" color={colors.blue} />
-              <p className="text-xs">Plafon</p>
+              <p className="text-sm font-semibold text-gray-700">Plafon</p>
             </div>
-            <h3 className="font-semibold text-black text-lg">
+            <h3 className="font-semibold text-black text-2xl">
               Rp{Math.round((application?.loanAmount ?? loanAmount) as number).toLocaleString('id-ID')}
             </h3>
-            <p>
+            <p className="text-sm text-gray-600">
               Tenor {(() => {
                 const lt = Number(application?.loanTermYears);
                 if (!lt || Number.isNaN(lt)) return tenor;
@@ -389,10 +427,10 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           </div>
 
           {/* FICO (from API) */}
-          <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + '33' }}>
-            <div className="flex items-center gap-2 mb-3">
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col items-center justify-center text-center min-h-[160px]" style={{ borderColor: colors.gray + '33' }}>
+            <div className="flex items-center gap-2 mb-3 justify-center">
               <BarChart3 className="h-7 w-7" color={colors.blue} />
-              <p className="text-xs font-medium">FICO® Score</p>
+              <p className="text-sm font-semibold text-gray-700">FICO® Score</p>
             </div>
             <div className="flex justify-center">
               {scoreLoading ? (
@@ -602,6 +640,89 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           </div>
         </section>
 
+        {/* Data Pengajuan KPR & Data Properti */}
+        <section className="border rounded-2xl p-5 bg-white shadow-sm" style={{ borderColor: colors.gray + '33' }}>
+          <h2 className="font-semibold text-black text-lg mb-4 flex items-center gap-2">
+            <FileText className="h-6 w-6 text-[#3FD8D4]" /> Data Pengajuan KPR
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Kiri: Data Pengajuan KPR */}
+            <div className="border rounded-xl p-4 bg-card shadow-sm">
+              <h3 className="font-semibold text-base mb-3 text-gray-900">Data Pengajuan</h3>
+              <div className="space-y-2 text-sm">
+                {[
+                  ['Jenis Properti', (application as any)?.propertyType ?? '-'],
+                  ['Nilai Properti', formatIDR((application as any)?.propertyValue)],
+                  ['Alamat Properti', (application as any)?.propertyAddress ?? '-'],
+                  ['Jenis Sertifikat', (application as any)?.propertyCertificateType ?? '-'],
+                  ['Developer', (application as any)?.developerName ?? '-'],
+                  ['Plafon (Loan Amount)', formatIDR((application as any)?.loanAmount)],
+                  ['Tenor', (() => {
+                    const lt = Number((application as any)?.loanTermYears);
+                    if (!lt || Number.isNaN(lt)) return '-';
+                    return `${lt} bulan`;
+                  })()],
+                  ['Suku Bunga', (application as any)?.interestRate != null ? `${((application as any)?.interestRate as number) * 100}%` : '-'],
+                  ['DP (Down Payment)', formatIDR((application as any)?.downPayment)],
+                  ['Rasio LTV', formatPct((application as any)?.ltvRatio)],
+                  ['Tujuan', (application as any)?.purpose ?? '-'],
+                  ['Diajukan', formatDate((application as any)?.submittedAt)],
+                  ['Catatan', (application as any)?.notes ?? '-'],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="flex justify-between border-b pb-1">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-medium text-right max-w-[55%]">{value as string}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Kanan: Data Properti */}
+            <div className="border rounded-xl p-4 bg-card shadow-sm">
+              <h3 className="font-semibold text-base mb-3 text-gray-900">Data Properti</h3>
+              {(() => {
+                const p = (application as any)?.propertyInfo;
+                if (!p) {
+                  return <p className="text-sm text-muted-foreground">Informasi properti tidak tersedia.</p>;
+                }
+                return (
+                  <div className="space-y-2 text-sm">
+                    {[
+                      ['Kode Properti', p.propertyCode ?? '-'],
+                      ['Judul', p.title ?? '-'],
+                      ['Deskripsi', p.description ?? '-'],
+                      ['Alamat', p.address ?? '-'],
+                      ['Kota', p.city ?? '-'],
+                      ['Provinsi', p.province ?? '-'],
+                      ['Kode Pos', p.postalCode ?? '-'],
+                      ['Kecamatan', p.district ?? '-'],
+                      ['Kelurahan', p.village ?? '-'],
+                      ['Luas Tanah', p.landArea != null ? `${p.landArea} m²` : '-'],
+                      ['Luas Bangunan', p.buildingArea != null ? `${p.buildingArea} m²` : '-'],
+                      ['Kamar Tidur', p.bedrooms ?? '-'],
+                      ['Kamar Mandi', p.bathrooms ?? '-'],
+                      ['Lantai', p.floors ?? '-'],
+                      ['Garasi', p.garage ?? '-'],
+                      ['Tahun Dibangun', p.yearBuilt ?? '-'],
+                      ['Harga', formatIDR(p.price)],
+                      ['Harga/m²', formatIDR(p.pricePerSqm)],
+                      ['Jenis Sertifikat', p.certificateType ?? '-'],
+                      ['Nomor Sertifikat', p.certificateNumber ?? '-'],
+                      ['PBB', formatIDR(p.pbbValue)],
+                    ].map(([label, value]) => (
+                      <div key={label as string} className="flex justify-between border-b pb-1">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="font-medium text-right max-w-[55%]">{value as string}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </section>
+
         {/* Dokumen Pendukung */}
         <section className="border rounded-2xl p-5 bg-white shadow-sm" style={{ borderColor: colors.gray + '33' }}>
           <h2 className="font-semibold text-black text-lg mb-4 flex items-center gap-2">
@@ -613,110 +734,7 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
             <DocRow title="Slip Gaji" url={customer.slip || null} onOpen={openDoc} colors={colors} />
           </div>
         </section>
-
-        {/* Control Panel + Rincian Angsuran */}
-        <section className="grid lg:grid-cols-2 gap-6 items-start">
-          {/* Pengaturan KPR */}
-          <div className="rounded-2xl bg-white p-5 border max-w-[500px]" style={{ borderColor: colors.gray + '33' }}>
-            <div className="flex items-center gap-2 mb-3">
-              <Settings2 className="h-9 w-9" color={colors.blue} />
-              <h2 className="font-semibold text-black text-base">Pengaturan KPR</h2>
-            </div>
-
-            <div className="space-y-6 mb-4">
-              <SliderRow
-                label="Harga Properti"
-                value={`Rp${hargaProperti.toLocaleString('id-ID')}`}
-                min={100_000_000}
-                max={5_000_000_000}
-                step={10_000_000}
-                sliderValue={hargaProperti}
-                onChange={setHargaProperti}
-              />
-
-              <SliderRow
-                label="Uang Muka (DP)"
-                value={`${persenDP}% (${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(hargaProperti * (persenDP / 100))})`}
-                min={10}
-                max={80}
-                step={5}
-                sliderValue={persenDP}
-                onChange={setPersenDP}
-              />
-
-              <SliderRow
-                label="Jangka Waktu"
-                value={`${jangkaWaktu} tahun (${jangkaWaktu * 12} bulan)`}
-                min={1}
-                max={30}
-                step={1}
-                sliderValue={jangkaWaktu}
-                onChange={setJangkaWaktu}
-              />
-            </div>
-
-            {/* Multi-rate editor */}
-            <div className="mb-4 border rounded-lg p-3" style={{ borderColor: colors.gray + '33' }}>
-              <p className="text-sm font-medium mb-2 text-gray-700">Penyesuaian Multi-Rate</p>
-
-              {rateSegments.map((seg, idx) => (
-                <div key={idx} className="grid grid-cols-4 gap-2 mb-2 items-end">
-                  <NumberInput
-                    tiny label="Mulai" value={seg.start} min={1} max={tenor}
-                    onChange={(val) => setRateSegments((prev) => prev.map((s, i) => (i === idx ? { ...s, start: val } : s)))}
-                  />
-                  <NumberInput
-                    tiny label="Selesai" value={seg.end} min={seg.start} max={tenor}
-                    onChange={(val) => setRateSegments((prev) => prev.map((s, i) => (i === idx ? { ...s, end: val } : s)))}
-                  />
-                  <NumberInput
-                    tiny label="Rate (%)" step="0.01" value={seg.rate}
-                    onChange={(val) => setRateSegments((prev) => prev.map((s, i) => (i === idx ? { ...s, rate: val } : s)))}
-                  />
-                  <button
-                    onClick={() => setRateSegments((prev) => prev.filter((_, i) => i !== idx))}
-                    className="text-red-500 hover:text-red-600 flex items-center gap-1 justify-center"
-                  >
-                    <Trash2 className="h-4 w-4" /> Hapus
-                  </button>
-                </div>
-              ))}
-
-              <button
-                onClick={() => {
-                  const last = rateSegments[rateSegments.length - 1];
-                  const lastEnd = last?.end ?? 0;
-                  if (lastEnd < tenor) {
-                    const nextStart = lastEnd + 1;
-                    const nextEnd = Math.min(nextStart + 11, tenor);
-                    const nextRate = last.rate < 10 ? parseFloat((last.rate + 1).toFixed(2)) : last.rate;
-                    setRateSegments((prev) => [...prev, { start: nextStart, end: nextEnd, rate: nextRate }]);
-                  }
-                }}
-                disabled={rateSegments.length > 0 && rateSegments[rateSegments.length - 1].end >= tenor}
-                className={`mt-2 flex items-center gap-2 text-sm rounded-lg px-3 py-1 border transition
-                  ${
-                    rateSegments.length > 0 && rateSegments[rateSegments.length - 1].end >= tenor
-                      ? 'opacity-50 cursor-not-allowed bg-gray-200 border-gray-300 text-gray-500'
-                      : 'text-white bg-[#FF8500] border-[#FF8500] hover:bg-[#e67300]'
-                  }`}
-              >
-                Tambah Segmen
-              </button>
-            </div>
-          </div>
-
-          {/* Rincian Angsuran */}
-          <InstallmentTable
-            colors={colors}
-            rows={rows}
-            page={page}
-            setPage={setPage}
-            pageSize={pageSize}
-            roundIDR={(n) => Math.round(n)}
-          />
-        </section>
-
+        
         {/* Actions (integrated approve/reject with reason modal) */}
         <section className="flex flex-wrap gap-3 justify-end">
           <button

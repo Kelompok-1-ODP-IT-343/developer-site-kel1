@@ -12,7 +12,7 @@ const coreApi = axios.create({
 
 // Axios instance untuk Credit Score API (Java service)
 const creditScoreApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL || "http://localhost:9090/api/v1",
+  baseURL: process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL || "http://localhost:9009/api/v1",
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",

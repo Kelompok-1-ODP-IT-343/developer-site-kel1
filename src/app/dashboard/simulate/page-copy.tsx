@@ -4,13 +4,14 @@ import {
   Check, X, Calculator, FileDown, Settings2, Info, XCircle,
   Plus, Trash2, User2, Wallet, BarChart3, FileText, Download
 } from "lucide-react";
-import React, { JSX, useMemo, useState } from "react";
+import React, { JSX, useMemo, useState, useEffect } from "react";
 // import {
 //   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 // } from "recharts";
 // import { Check, X, Calculator, FileDown, Settings2, Info, XCircle, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
+import { getKPRApplicationDetail } from "@/lib/coreApi";
 import { customers } from "@/components/data/customers"
 import { Button } from "@/components/ui/button"
 // import jsPDF from "jspdf"
@@ -41,6 +42,32 @@ export default function ApprovalDetailMockup(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
+  const applicationNumber = searchParams.get("applicationNumber");
+
+  const [applicationDetail, setApplicationDetail] = useState<any>(null);
+  const [loadingApp, setLoadingApp] = useState<boolean>(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      if (!applicationNumber) return;
+      try {
+        setLoadingApp(true);
+        const resp = await getKPRApplicationDetail(String(applicationNumber));
+        const payload = (resp as any)?.data ?? resp;
+        if (!cancelled) setApplicationDetail(payload);
+      } catch (e) {
+        if (!cancelled) setApplicationDetail(null);
+        console.error("Failed to fetch application detail", e);
+      } finally {
+        if (!cancelled) setLoadingApp(false);
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationNumber]);
 
   // cari customer berdasarkan ID
   const customer = customers.find(c => c.id === id);
@@ -277,7 +304,25 @@ export default function ApprovalDetailMockup(): JSX.Element {
       {/* Main */}
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
         {/* Summary Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Kotak Aplikasi - ditempatkan di sebelah kiri Nasabah */}
+          <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + "33" }}>
+            <div className="flex items-center gap-2 mb-1">
+              <FileText className="h-7 w-7" color={colors.blue} />
+              <p className="text-base font-semibold">Aplikasi</p>
+            </div>
+            <div className="text-sm space-y-1">
+              <p>
+                <span className="text-gray-600">Nomor Aplikasi: </span>
+                <span className="font-semibold text-black">{applicationNumber || "-"}</span>
+              </p>
+              <p>
+                <span className="text-gray-600">Status: </span>
+                <span className="font-semibold text-black">{loadingApp ? "Memuat..." : (applicationDetail?.status ?? applicationDetail?.data?.status ?? "-")}</span>
+              </p>
+            </div>
+          </div>
+
           <div className="p-5 rounded-2xl shadow-sm border flex flex-col" style={{ borderColor: colors.gray + "33" }}>
             <div className="flex items-center gap-2 mb-1">
               <User2 className="h-7 w-7" color={colors.blue} />
