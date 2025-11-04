@@ -1,8 +1,9 @@
 name: Build and Push to Docker Hub
 
 on:
+  workflow_dispatch:
   push:
-    branches: ["master"]
+    branches: ["main", "master"]
     tags: ["v*"]
 
 jobs:
