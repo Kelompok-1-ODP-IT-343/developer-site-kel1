@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/tabs"
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import {
   Settings,
@@ -75,7 +75,8 @@ interface UserProfile {
 
 type Section = "settings" | "notifications" | "help";
 
-export default function AkunPage() {
+// Client component that uses search params
+function AkunContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [active, setActive] = useState<Section>("settings");
@@ -418,6 +419,49 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function LoadingAkun() {
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <header className="bg-white border-b shadow-sm">
+        <div className="max-w-7xl mx-auto flex justify-between items-center px-4 py-3">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-32"></div>
+          </div>
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-24"></div>
+          </div>
+        </div>
+      </header>
+      <div className="flex-1 flex">
+        <div className="w-64 bg-white border-r p-4">
+          <div className="animate-pulse space-y-4">
+            <div className="h-10 bg-gray-200 rounded"></div>
+            <div className="h-10 bg-gray-200 rounded"></div>
+            <div className="h-10 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+        <div className="flex-1 p-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+            <div className="h-4 bg-gray-200 rounded w-full"></div>
+            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function AkunPage() {
+  return (
+    <Suspense fallback={<LoadingAkun />}>
+      <AkunContent />
+    </Suspense>
   );
 }
 
