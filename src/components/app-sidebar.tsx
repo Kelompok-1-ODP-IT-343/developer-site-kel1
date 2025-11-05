@@ -6,10 +6,10 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar, // ← untuk cek state collapsed/expanded
 } from "@/components/ui/sidebar"
 import {
   Home,
@@ -19,7 +19,8 @@ import {
   Bell,
   HelpCircle,
   LogOut,
-  Settings
+  Settings,
+  HardHat
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useState, useEffect } from "react"
 import { getUserProfile } from "@/lib/coreApi"
+import { logout } from "@/services/auth"
 
 // Menu dengan ikon sesuai nama
 const menuItems = [
@@ -40,8 +42,6 @@ const menuItems = [
   { name: "Approval KPR", icon: CheckSquare },
   { name: "Approval History", icon: ListTodo }
 ]
-
-import { logout } from "@/services/auth"
 
 interface UserProfile {
   id: number;
@@ -67,6 +67,10 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // status collapsed/expanded dari shadcn sidebar
+  const { state } = useSidebar() // "expanded" | "collapsed"
+  const isCollapsed = state === "collapsed"
+
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
@@ -80,27 +84,39 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
         setLoading(false)
       }
     }
-
     fetchUserProfile()
   }, [])
 
   return (
     <Sidebar collapsible="icon">
       {/* === HEADER LOGO === */}
-      <div className="flex items-center justify-center py-6">
+      <div className="flex flex-col items-center justify-center py-6">
         <Image
           src="/sidebar_satuatap.png"
           alt="Satu Atap"
-          width={140}
-          height={40}
+          width={isCollapsed ? 28 : 140}
+          height={isCollapsed ? 28 : 40}
           className="object-contain"
+          priority
         />
+
+        {isCollapsed ? (
+          // Collapsed: hanya ikon helm (tooltip opsional via title)
+          <div className="mt-2" title="For Developer">
+            <HardHat className="h-5 w-5" aria-label="For Developer" />
+          </div>
+        ) : (
+          // Expanded: ikon + teks besar
+          <div className="mt-2 flex items-center gap-2 whitespace-nowrap">
+            <HardHat className="h-5 w-5" aria-hidden="true" />
+            <span className="text-xl font-bold tracking-wide">For Developer</span>
+          </div>
+        )}
       </div>
 
       {/* === MENU === */}
       <SidebarContent>
         <SidebarGroup>
-          {/* <SidebarGroupLabel>Menu</SidebarGroupLabel> */}
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
@@ -118,7 +134,6 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
                       <item.icon className="h-8 w-8" />
                       <span className="text-[16px]">{item.name}</span>
                     </button>
-
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
@@ -192,7 +207,6 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
             <DropdownMenuItem onClick={() => router.push("/akun?tab=help")}>
               <HelpCircle className="mr-2 h-4 w-4" /> Help
             </DropdownMenuItem>
-
 
             <DropdownMenuSeparator />
             <DropdownMenuItem
