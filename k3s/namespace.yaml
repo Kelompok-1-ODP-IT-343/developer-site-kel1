@@ -4,3 +4,4 @@ metadata:
   name: griya-app-prod
   labels:
     name: griya-app-prod
+    app.kubernetes.io/managed-by: argocd
