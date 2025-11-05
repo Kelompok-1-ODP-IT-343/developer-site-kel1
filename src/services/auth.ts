@@ -29,6 +29,47 @@ export function clearTokens() {
   localStorage.removeItem(LS_KEYS.refreshToken);
   localStorage.removeItem(LS_KEYS.refreshExpiresAt);
   localStorage.removeItem("user_name");
+  // Best-effort: also clear any same-site cookies that might be used by backend/front-end
+  try {
+    const cookieNames = [
+      "access_token",
+      "refresh_token",
+      "token",
+      "refreshToken",
+      "Authorization",
+    ];
+
+    const deleteCookie = (name: string, opts?: { domain?: string; secure?: boolean }) => {
+      const parts: string[] = [
+        `${encodeURIComponent(name)}=`,
+        "expires=Thu, 01 Jan 1970 00:00:00 GMT",
+        "path=/",
+      ];
+      if (opts?.domain) parts.push(`domain=${opts.domain}`);
+      if (opts?.secure) parts.push("secure");
+      parts.push("samesite=lax");
+      document.cookie = parts.join("; ");
+    };
+
+    const host = window.location.hostname;
+    const domainsToTry = [undefined, host];
+    // If subdomain like app.example.com, also try .example.com
+    const hostParts = host.split(".");
+    if (hostParts.length > 2) {
+      const topLevel = hostParts.slice(-2).join(".");
+      domainsToTry.push(`.${topLevel}`);
+    }
+
+    for (const name of cookieNames) {
+      for (const domain of domainsToTry) {
+        // Try both with and without secure flag to maximize deletion chances
+        deleteCookie(name, { domain, secure: false });
+        deleteCookie(name, { domain, secure: true });
+      }
+    }
+  } catch (_) {
+    // ignore cookie clearing errors
+  }
 }
 
 export function getAccessToken(): string | null {

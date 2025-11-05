@@ -19,6 +19,22 @@ import {
 import { getKPRApplicationDetail, getCreditScore, approveKPRApplication, rejectKPRApplication, getCreditRecommendation } from '@/lib/coreApi';
 
 /** ---------- Types from your API (minimal) ---------- */
+type ApprovalWorkflow = {
+  workflowId: number;
+  applicationId: number;
+  stage: 'PROPERTY_APPRAISAL' | 'CREDIT_ANALYSIS' | 'FINAL_APPROVAL' | string;
+  assignedTo?: number | null;
+  assignedToName?: string | null;
+  assignedToEmail?: string | null;
+  assignedToRole?: string | null;
+  status?: 'PENDING' | 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | string | null;
+  priority?: string | null;
+  dueDate?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  approvalNotes?: string | null;
+  rejectionReason?: string | null;
+};
 type KPRApplicationData = {
   id?: number;
   applicationId?: number;
@@ -193,11 +209,22 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [reasonInput, setReasonInput] = useState("");
+  // derive workflows from application to avoid extra local state
+  const workflows: ApprovalWorkflow[] = useMemo(() => {
+    const arr = (application as any)?.approvalWorkflows as ApprovalWorkflow[] | undefined;
+    return Array.isArray(arr) ? arr : [];
+  }, [application]);
   
   // Credit Recommendation State
   const [recommendation, setRecommendation] = useState<CreditRecommendation | null>(null);
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
+
+  // Sorted workflows for stepper (declare before any early return to keep hook order stable)
+  const sortedWorkflows: ApprovalWorkflow[] = useMemo(() => {
+    const arr = Array.isArray(workflows) ? [...workflows] : [];
+    return arr.sort((a, b) => (a.workflowId ?? 0) - (b.workflowId ?? 0));
+  }, [workflows]);
 
   useEffect(() => {
     let active = true;
@@ -214,7 +241,7 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
         const api = await getKPRApplicationDetail(id);
 
         // Works for either AxiosResponse<{ success, message, data }> or plain object
-        const payload: KPRApplicationData | undefined =
+        const payload: KPRApplicationData | (KPRApplicationData & { approvalWorkflows?: ApprovalWorkflow[]; kprRateInfo?: any; propertyInfo?: any }) | undefined =
           api?.data?.data ??     // <- inner data for { success, message, data }
           api?.data ??           // <- plain { ... } returned as AxiosResponse
           api;
@@ -225,9 +252,10 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           setLoadError('Data tidak ditemukan.');
           return;
         }
-  const customerData = mapToCustomerDetail(id, payload);
+  const customerData = mapToCustomerDetail(id, payload as KPRApplicationData);
         setCustomer(customerData);
   setApplication(payload as any);
+  // workflows are derived from application state via useMemo
 
         // Fetch credit score after customer data is loaded
         if (customerData.id) {
@@ -351,6 +379,33 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
 
   const openDoc = (title: string, url: string | null) => setDocViewer({ open: true, title, url });
   const closeDoc = () => setDocViewer({ open: false, title: '', url: null });
+  
+  // ----- Approval progress helpers -----
+  const nameOrEmail = (wf?: ApprovalWorkflow | null) => {
+    if (!wf) return '-';
+    return (wf.assignedToName && wf.assignedToName.trim()) ? wf.assignedToName : (wf.assignedToEmail ?? '-');
+  };
+
+  const statusBadge = (status?: string | null) => {
+    const s = (status ?? '').toUpperCase();
+    if (s === 'APPROVED' || s === 'COMPLETED' || s === 'DONE') return 'bg-green-100 text-green-700 border-green-200';
+    if (s === 'REJECTED') return 'bg-red-100 text-red-700 border-red-200';
+    if (s === 'IN_PROGRESS') return 'bg-blue-100 text-blue-700 border-blue-200';
+    return 'bg-yellow-100 text-yellow-700 border-yellow-200'; // pending/default
+  };
+
+  type NodeState = 'done' | 'active' | 'pending';
+  const nodeState = (index: number): NodeState => {
+    // 0: Assignment (virtual), 1..3: workflows
+    if (index === 0) return sortedWorkflows.length > 0 ? 'done' : 'active';
+    const wf = sortedWorkflows[index - 1];
+    const st = (wf?.status ?? '').toUpperCase();
+    if (['APPROVED', 'COMPLETED', 'DONE'].includes(st)) return 'done';
+    // active if all previous (including virtual assignment and previous workflows) are done
+    const prevDone = index === 1 ? true : (['APPROVED', 'COMPLETED', 'DONE'].includes(((sortedWorkflows[index - 2]?.status) ?? '').toUpperCase()));
+    if (prevDone && (st === 'PENDING' || st === 'IN_PROGRESS' || st === '')) return 'active';
+    return 'pending';
+  };
 
   return (
     <div className="approval-page min-h-screen bg-white text-gray-700 relative">
@@ -735,30 +790,87 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           </div>
         </section>
         
-        {/* Actions (integrated approve/reject with reason modal) */}
-        <section className="flex flex-wrap gap-3 justify-end">
-          <button
-            disabled={actionLoading}
-            onClick={() => {
-              setReasonInput("");
-              setShowRejectModal(true);
-            }}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-red-600 transition-colors"
-            style={{ background: '#dc2626' }}
-          >
-            <X className="h-5 w-5" /> Reject
-          </button>
-          <button
-            disabled={actionLoading}
-            onClick={() => {
-              setReasonInput("");
-              setShowApproveModal(true);
-            }}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-green-600 transition-colors"
-            style={{ background: '#16a34a' }}
-          >
-            <Check className="h-5 w-5" /> Approve
-          </button>
+        {/* Approval Progress + Actions */}
+        <section className="border rounded-2xl p-5 bg-white shadow-sm space-y-6" style={{ borderColor: colors.gray + '33' }}>
+          <h2 className="font-semibold text-black text-lg mb-2 flex items-center gap-2">
+            <Settings2 className="h-6 w-6 text-[#3FD8D4]" /> Approval Progress
+          </h2>
+
+          {/* Futuristic stepper */}
+          <div className="relative px-2 py-4">
+            {/* line */}
+            <div className="absolute left-8 right-8 top-8 h-1 bg-gradient-to-r from-gray-200 via-[#3FD8D4]/40 to-gray-200 rounded-full" />
+            <div className="grid grid-cols-4 gap-4 relative">
+              {[0,1,2,3].map((i) => {
+                const state = nodeState(i);
+                const base = 'flex flex-col items-center text-center';
+                const isDone = state === 'done';
+                const isActive = state === 'active';
+                const dotCls = isDone ? 'bg-green-500 border-green-500' : isActive ? 'bg-[#3FD8D4] border-[#3FD8D4]' : 'bg-gray-200 border-gray-300';
+                const ringCls = isActive ? 'ring-4 ring-[#3FD8D4]/30' : '';
+                const title = i === 0 ? 'KPR Approval Assignment' : i === 1 ? 'Property Appraisal' : i === 2 ? 'Credit Analysis' : 'Final Approval';
+                const wf = i > 0 ? sortedWorkflows[i - 1] : undefined;
+                return (
+                  <div key={i} className={`${base} px-2`}>
+                    <div className={`w-6 h-6 rounded-full border ${dotCls} ${ringCls}`} />
+                    <div className="mt-3 text-sm font-semibold text-gray-900">{title}</div>
+                    {/* content card */}
+                    <div className="mt-2 w-full max-w-[260px] rounded-xl border p-3 shadow-sm bg-white">
+                      {i === 0 ? (
+                        <div className="space-y-2 text-xs text-gray-700">
+                          <div className="flex justify-between"><span className="text-muted-foreground">PIC</span><span className="font-medium">Super Admin</span></div>
+                          <div className="border-t pt-2">
+                            <div className="font-medium mb-1">Name Assign</div>
+                            {sortedWorkflows.slice(0,3).map((w, idx) => (
+                              <div key={w.workflowId} className="flex justify-between">
+                                <span className="text-muted-foreground">Step {idx+1}</span>
+                                <span className="font-medium truncate max-w-[60%] text-right">{nameOrEmail(w)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 text-xs text-gray-700">
+                          <div className="flex justify-between"><span className="text-muted-foreground">PIC</span><span className="font-medium truncate max-w-[60%] text-right">{nameOrEmail(wf)}</span></div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-medium truncate max-w-[60%] text-right">{wf?.assignedToEmail ?? '-'}</span></div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Status</span>
+                            <span className={`px-2 py-0.5 rounded-full border text-[10px] font-semibold ${statusBadge(wf?.status)}`}>{(wf?.status ?? 'PENDING')}</span>
+                          </div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Note</span><span className="font-medium truncate max-w-[60%] text-right">{wf?.approvalNotes ?? wf?.rejectionReason ?? '-'}</span></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Actions under tracker */}
+          <div className="flex flex-wrap gap-3 justify-end pt-2">
+            <button
+              disabled={actionLoading}
+              onClick={() => {
+                setReasonInput("");
+                setShowRejectModal(true);
+              }}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-red-600 transition-colors"
+              style={{ background: '#dc2626' }}
+            >
+              <X className="h-5 w-5" /> Reject
+            </button>
+            <button
+              disabled={actionLoading}
+              onClick={() => {
+                setReasonInput("");
+                setShowApproveModal(true);
+              }}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl font-medium text-white shadow hover:bg-green-600 transition-colors"
+              style={{ background: '#16a34a' }}
+            >
+              <Check className="h-5 w-5" /> Approve
+            </button>
+          </div>
         </section>
       {/* Approve Modal */}
       <Dialog open={showApproveModal} onOpenChange={(v) => setShowApproveModal(v)}>
@@ -766,6 +878,14 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           <DialogHeader>
             <DialogTitle>Alasan Persetujuan Kredit</DialogTitle>
           </DialogHeader>
+          {/* Summary Info */}
+          <div className="mb-3 grid grid-cols-1 gap-2 rounded-xl border p-3 bg-gray-50">
+            <SummaryRow label="KPR ID" value={`${(application as any)?.applicationNumber ?? id}`} />
+            <SummaryRow label="KPR Price" value={formatIDR((application as any)?.loanAmount ?? loanAmount)} />
+            <SummaryRow label="Tenor" value={`${(application as any)?.loanTermYears ?? jangkaWaktu} tahun`} />
+            <SummaryRow label="KPR Rate" value={`${(application as any)?.kprRateInfo?.rateName ?? '-'}`} />
+            <SummaryRow label="Property" value={`${(application as any)?.propertyInfo?.title ?? '-'}`} />
+          </div>
           <div className="py-2">
             <textarea
               className="w-full border rounded p-2 min-h-[60px]"
@@ -821,6 +941,14 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
           <DialogHeader>
             <DialogTitle>Alasan Penolakan Kredit</DialogTitle>
           </DialogHeader>
+          {/* Summary Info */}
+          <div className="mb-3 grid grid-cols-1 gap-2 rounded-xl border p-3 bg-gray-50">
+            <SummaryRow label="KPR ID" value={`${(application as any)?.applicationNumber ?? id}`} />
+            <SummaryRow label="KPR Price" value={formatIDR((application as any)?.loanAmount ?? loanAmount)} />
+            <SummaryRow label="Tenor" value={`${(application as any)?.loanTermYears ?? jangkaWaktu} tahun`} />
+            <SummaryRow label="KPR Rate" value={`${(application as any)?.kprRateInfo?.rateName ?? '-'}`} />
+            <SummaryRow label="Property" value={`${(application as any)?.propertyInfo?.title ?? '-'}`} />
+          </div>
           <div className="py-2">
             <textarea
               className="w-full border rounded p-2 min-h-[60px]"
@@ -1139,4 +1267,14 @@ function buildMultiSegmentSchedule(principal: number, segments: { start: number;
     }
   }
   return rows;
+}
+
+// Small utility component for modal summary rows
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-right max-w-[60%] truncate">{value}</span>
+    </div>
+  );
 }
