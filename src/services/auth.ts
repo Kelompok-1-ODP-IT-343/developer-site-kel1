@@ -1,33 +1,59 @@
-import coreApi from "@/lib/coreApi";
+import coreApi, { refreshClient } from "@/lib/coreApi";
 import { decodeJWT, isTokenExpired } from "@/lib/jwtUtils";
 
-// Keys used in localStorage
-const LS_KEYS = {
-  accessToken: "access_token",
-  refreshToken: "refresh_token",
-  refreshExpiresAt: "refresh_expires_at", // epoch ms when refresh token (client-side policy) expires
-} as const;
-
-// 24 hours in milliseconds
-export const REFRESH_TTL_MS = 24 * 60 * 60 * 1000;
-
-export function saveTokens(params: { accessToken: string; refreshToken?: string; refreshTtlMs?: number }) {
-  if (typeof window === "undefined") return;
-  const { accessToken, refreshToken, refreshTtlMs = REFRESH_TTL_MS } = params;
-  localStorage.setItem(LS_KEYS.accessToken, accessToken);
-  if (refreshToken) {
-    localStorage.setItem(LS_KEYS.refreshToken, refreshToken);
-    // If the refresh token is a JWT with exp, we'll still set client-side fallback expiry of 24h
-    const expiresAt = Date.now() + refreshTtlMs;
-    localStorage.setItem(LS_KEYS.refreshExpiresAt, String(expiresAt));
+// Cookie helpers
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const value = document.cookie
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${name}=`));
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value.split("=")[1]);
+  } catch {
+    return value.split("=")[1];
   }
+}
+
+function setCookieMaxAge(name: string, value: string, maxAgeSeconds: number) {
+  if (typeof document === "undefined") return;
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const encoded = encodeURIComponent(value);
+  document.cookie = `${name}=${encoded}; max-age=${maxAgeSeconds}; path=/; ${isHttps ? "secure; " : ""}SameSite=Lax`;
+}
+
+function deleteCookie(name: string) {
+  if (typeof document === "undefined") return;
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  document.cookie = `${name}=; max-age=0; path=/; ${isHttps ? "secure; " : ""}SameSite=Lax`;
+}
+
+// TTL policy now controlled by cookie expiry directly
+export const REFRESH_TTL_MS = 24 * 60 * 60 * 1000; // kept for reference but not stored
+
+export function saveTokens(params: { accessToken: string; refreshToken?: string }) {
+  if (typeof window === "undefined") return;
+  const { accessToken, refreshToken } = params;
+  // token: expire 15 menit; refreshToken: expire 24 jam
+  setCookieMaxAge("token", accessToken, 15 * 60);
+  if (refreshToken) {
+    setCookieMaxAge("refreshToken", refreshToken, 24 * 60 * 60);
+  }
+  // Cleanup legacy cookies
+  deleteCookie("access_token");
+  deleteCookie("refresh_token");
+  deleteCookie("refresh_expires_at");
 }
 
 export function clearTokens() {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(LS_KEYS.accessToken);
-  localStorage.removeItem(LS_KEYS.refreshToken);
-  localStorage.removeItem(LS_KEYS.refreshExpiresAt);
+  deleteCookie("token");
+  deleteCookie("refreshToken");
+  // Cleanup legacy cookies
+  deleteCookie("access_token");
+  deleteCookie("refresh_token");
+  deleteCookie("refresh_expires_at");
   localStorage.removeItem("user_name");
   // Best-effort: also clear any same-site cookies that might be used by backend/front-end
   try {
@@ -74,34 +100,20 @@ export function clearTokens() {
 
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(LS_KEYS.accessToken);
+  return getCookie("token");
 }
 
 export function getRefreshToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(LS_KEYS.refreshToken);
+  return getCookie("refreshToken");
 }
 
 export function isRefreshExpired(): boolean {
+  // Dengan cookie expiry, jika cookie hilang maka dianggap expired
   try {
     if (typeof window === "undefined") return true;
-    const token = localStorage.getItem(LS_KEYS.refreshToken);
-    if (!token) return true;
-
-    // Prefer JWT exp if the refresh token is a JWT
-    const isJwt = token.split(".").length === 3;
-    if (isJwt) {
-      const payload = decodeJWT(token as string);
-      if (!payload?.exp) return false; // if no exp, fall back below
-      const nowSec = Math.floor(Date.now() / 1000);
-      return payload.exp < nowSec;
-    }
-
-    // Fallback to client-side 24h TTL from stored timestamp
-    const expiresAtStr = localStorage.getItem(LS_KEYS.refreshExpiresAt);
-    if (!expiresAtStr) return false; // if not present, don't block refresh but server will decide
-    const expiresAt = Number(expiresAtStr);
-    return Date.now() > expiresAt;
+    const token = getCookie("refreshToken");
+    return !token;
   } catch (_) {
     return true;
   }
@@ -130,7 +142,7 @@ export type AuthFailure = {
 
 export function getCurrentUser(): AuthSuccess["user"] | null {
   try {
-    const token = localStorage.getItem(LS_KEYS.accessToken);
+    const token = getAccessToken();
     if (!token || isTokenExpired(token)) {
       return null;
     }
@@ -208,8 +220,8 @@ export async function loginBlueprint(
         };
       }
 
-      // Store the JWT tokens with a 24h refresh TTL policy
-      saveTokens({ accessToken: data.token, refreshToken: data.refreshToken, refreshTtlMs: REFRESH_TTL_MS });
+      // Store the JWT tokens in cookies (token 15m, refreshToken 24h)
+      saveTokens({ accessToken: data.token, refreshToken: data.refreshToken });
       
       // Check if the user has the developer role
       const userRole = decodedToken.role.toLowerCase();
@@ -274,8 +286,8 @@ export async function initiateLogin(
       if (!decodedToken) {
         return { success: false, requiresOtp: false, message: 'Invalid token received' };
       }
-      // Persist tokens
-      saveTokens({ accessToken: data.token, refreshToken: data.refreshToken, refreshTtlMs: REFRESH_TTL_MS });
+      // Persist tokens in cookies
+      saveTokens({ accessToken: data.token, refreshToken: data.refreshToken });
       const userRole = (decodedToken.role || '').toLowerCase();
       if (userRole !== 'developer') {
         return { success: false, requiresOtp: false, message: 'Access denied. This portal is only for developers.' };
@@ -314,8 +326,8 @@ export async function verifyOtpLogin(params: { identifier: string; otp: string }
       return { success: false, message: 'Invalid token received' };
     }
 
-    // Persist tokens
-    saveTokens({ accessToken: data.token, refreshToken: data.refreshToken, refreshTtlMs: REFRESH_TTL_MS });
+    // Persist tokens in cookies
+    saveTokens({ accessToken: data.token, refreshToken: data.refreshToken });
 
     const userRole = (decodedToken.role || '').toLowerCase();
     if (userRole !== 'developer') {
@@ -348,20 +360,21 @@ export async function refreshAccessToken(): Promise<{ success: boolean; accessTo
       return { success: false, message: "No refresh token" };
     }
 
-    const resp = await coreApi.post(
+    const resp = await refreshClient.post(
       '/auth/refresh',
-      { refreshToken },
-      { headers: { 'x-skip-auth': 'true' } } // ensure no Authorization header is attached
+      { refreshToken }
     );
 
-    const { success, data, message } = resp.data || {};
-    if (!success || !data?.token) {
-      return { success: false, message: message || 'Failed to refresh token' };
+    const respData = resp?.data ?? {};
+    const token = respData?.data?.token ?? respData?.token;
+    const newRefresh = respData?.data?.refreshToken ?? respData?.refreshToken;
+    if (!token) {
+      return { success: false, message: respData?.message || 'Failed to refresh token' };
     }
 
-    // Save new tokens
-    saveTokens({ accessToken: data.token, refreshToken: data.refreshToken, refreshTtlMs: REFRESH_TTL_MS });
-    return { success: true, accessToken: data.token, refreshToken: data.refreshToken };
+    // Save new tokens to cookies
+    saveTokens({ accessToken: token, refreshToken: newRefresh });
+    return { success: true, accessToken: token, refreshToken: newRefresh };
   } catch (err: any) {
     return { success: false, message: err?.response?.data?.message || 'Failed to refresh token' };
   }
