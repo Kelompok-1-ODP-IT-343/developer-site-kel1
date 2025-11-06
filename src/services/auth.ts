@@ -11,17 +11,6 @@ const LS_KEYS = {
 // 24 hours in milliseconds
 export const REFRESH_TTL_MS = 24 * 60 * 60 * 1000;
 
-// Simple cookie reader (non-HttpOnly only)
-function getCookie(name: string): string | null {
-  try {
-    if (typeof document === "undefined") return null;
-    const m = document.cookie.match(new RegExp("(?:^|; )" + encodeURIComponent(name) + "=([^;]*)"));
-    return m ? decodeURIComponent(m[1]) : null;
-  } catch {
-    return null;
-  }
-}
-
 export function saveTokens(params: { accessToken: string; refreshToken?: string; refreshTtlMs?: number }) {
   if (typeof window === "undefined") return;
   const { accessToken, refreshToken, refreshTtlMs = REFRESH_TTL_MS } = params;
@@ -85,16 +74,12 @@ export function clearTokens() {
 
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(LS_KEYS.accessToken) || getCookie("token");
+  return localStorage.getItem(LS_KEYS.accessToken);
 }
 
 export function getRefreshToken(): string | null {
   if (typeof window === "undefined") return null;
-  return (
-    localStorage.getItem(LS_KEYS.refreshToken) ||
-    getCookie("refreshToken") ||
-    getCookie("refresh_token")
-  );
+  return localStorage.getItem(LS_KEYS.refreshToken);
 }
 
 export function isRefreshExpired(): boolean {
@@ -145,7 +130,7 @@ export type AuthFailure = {
 
 export function getCurrentUser(): AuthSuccess["user"] | null {
   try {
-    const token = getAccessToken();
+    const token = localStorage.getItem(LS_KEYS.accessToken);
     if (!token || isTokenExpired(token)) {
       return null;
     }

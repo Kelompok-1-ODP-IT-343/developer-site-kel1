@@ -76,7 +76,7 @@ function ConfirmContent() {
 
         <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-800">
-            <strong>Note:</strong> This is a dummy confirmation page for testing purposes. Simply click "Confirm" to proceed.
+            <strong>Note:</strong> This is a dummy confirmation page for testing purposes. Simply click &quot;Confirm&quot; to proceed.
           </p>
         </div>
       </div>

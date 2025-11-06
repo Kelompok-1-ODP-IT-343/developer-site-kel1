@@ -5,8 +5,6 @@ const coreApi = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1",
   // baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
   timeout: 10000,
-  // Important: send cookies for same-site cross-port requests (needed if backend issues auth cookies)
-  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -21,18 +19,7 @@ const creditScoreApi = axios.create({
   },
 });
 
-// Simple cookie reader (non-HttpOnly cookies only)
-const getCookie = (name: string): string | null => {
-  try {
-    if (typeof document === "undefined") return null;
-    const m = document.cookie.match(new RegExp("(?:^|; )" + encodeURIComponent(name) + "=([^;]*)"));
-    return m ? decodeURIComponent(m[1]) : null;
-  } catch {
-    return null;
-  }
-};
-
-// Interceptor: sisipkan Authorization jika ada token di localStorage atau fallback cookie
+// Interceptor: sisipkan Authorization jika ada token di localStorage
 coreApi.interceptors.request.use((config) => {
   try {
     if (typeof window !== "undefined") {
@@ -43,11 +30,7 @@ coreApi.interceptors.request.use((config) => {
         config.headers = headers;
         return config;
       }
-      let token = localStorage.getItem("access_token");
-      // Fallback: use cookie named `token` when localStorage is empty (non-HttpOnly only)
-      if (!token) {
-        token = getCookie("token");
-      }
+      const token = localStorage.getItem("access_token");
       if (token) {
         const authHeader = `Bearer ${token}`;
         if (config.headers instanceof AxiosHeaders) {
@@ -105,11 +88,7 @@ coreApi.interceptors.response.use(
 
       try {
         // Get the refresh token from storage
-        let refreshToken = typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null;
-        // Fallback: try read cookie if backend stores refresh token as cookie
-        if (!refreshToken && typeof document !== "undefined") {
-          refreshToken = getCookie("refreshToken") || getCookie("refresh_token");
-        }
+        const refreshToken = typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null;
         if (!refreshToken) {
           throw new Error("No refresh token available");
         }
@@ -130,13 +109,9 @@ coreApi.interceptors.response.use(
         );
 
         if (response.data.success) {
-          let token = response.data?.data?.token as string | undefined;
-          // Some backends set cookies only and don't return token in body
-          if (!token) {
-            token = getCookie("token") || undefined;
-          }
+          const { token } = response.data.data;
           if (typeof window !== "undefined") {
-            if (token) localStorage.setItem("access_token", token);
+            localStorage.setItem("access_token", token);
             // If API also returns new refresh token, persist it and bump expiry window to 24h
             if (response.data?.data?.refreshToken) {
               localStorage.setItem("refresh_token", response.data.data.refreshToken);
@@ -145,14 +120,7 @@ coreApi.interceptors.response.use(
           }
 
           // Update authorization header
-          if (token) {
-            originalRequest.headers["Authorization"] = `Bearer ${token}`;
-          } else {
-            // rely on cookie auth if present
-            if (originalRequest.headers && originalRequest.headers["Authorization"]) {
-              delete originalRequest.headers["Authorization"];
-            }
-          }
+          originalRequest.headers["Authorization"] = `Bearer ${token}`;
 
           // Process queued requests
           processQueue(null, token);
@@ -187,19 +155,12 @@ coreApi.interceptors.response.use(
 
     // If error is still 401 after refresh attempt, or any other error
     if (error.response?.status === 401) {
-      const isRefreshCall = (originalRequest?.url || "").includes("/auth/refresh");
-      const hasRefresh = (typeof window !== "undefined")
-        ? (localStorage.getItem("refresh_token") || getCookie("refreshToken") || getCookie("refresh_token"))
-        : null;
-
-      if (originalRequest?._retry || isRefreshCall || !hasRefresh) {
-        // Hard logout only when refresh failed or we don't have refresh token at all
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-          localStorage.removeItem("refresh_expires_at");
-          window.location.href = "/login";
-        }
+      // Clear tokens and redirect to login
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("refresh_expires_at");
+        window.location.href = "/login";
       }
     }
 
