@@ -2,7 +2,7 @@
 
 import RoleGuard from '@/components/RoleGuard';
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   SidebarProvider,
@@ -20,7 +20,16 @@ import ApprovalHistory from "@/components/ApprovalHistory"
 export default function Dashboard() {
   const router = useRouter()
   const [activeMenu, setActiveMenu] = useState("Home")
-  const [currentDate, setCurrentDate] = useState(new Date())
+  // Avoid SSR/client hydration mismatch by rendering date only after mount
+  const [currentDate, setCurrentDate] = useState<Date | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    setCurrentDate(new Date())
+    const id = setInterval(() => setCurrentDate(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const renderContent = () => {
     switch (activeMenu) {
@@ -54,16 +63,21 @@ export default function Dashboard() {
             <header className="flex justify-between items-center mb-8 text-gray-600 dark:text-gray-300">
               <div className="flex items-center gap-3">
                 <SidebarTrigger />
-                <span className="font-medium">
-                  {currentDate.toLocaleDateString("id-ID", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
-                </span>
+                {/* Render nothing on the server and until mounted to prevent hydration mismatch */}
+                {mounted && currentDate ? (
+                  <span className="font-medium" suppressHydrationWarning>
+                    {currentDate.toLocaleString("id-ID", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </span>
+                ) : (
+                  <span className="font-medium" aria-hidden="true">&nbsp;</span>
+                )}
               </div>
 
               {/* 🌙 TOGGLE BUTTON */}
