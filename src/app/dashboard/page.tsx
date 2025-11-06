@@ -26,9 +26,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     setMounted(true)
+    // Set once on mount; no interval to avoid resource usage
     setCurrentDate(new Date())
-    const id = setInterval(() => setCurrentDate(new Date()), 1000)
-    return () => clearInterval(id)
   }, [])
 
   const renderContent = () => {
@@ -66,13 +65,10 @@ export default function Dashboard() {
                 {/* Render nothing on the server and until mounted to prevent hydration mismatch */}
                 {mounted && currentDate ? (
                   <span className="font-medium" suppressHydrationWarning>
-                    {currentDate.toLocaleString("id-ID", {
+                    {currentDate.toLocaleDateString("id-ID", {
                       day: "2-digit",
                       month: "short",
                       year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
                     })}
                   </span>
                 ) : (
