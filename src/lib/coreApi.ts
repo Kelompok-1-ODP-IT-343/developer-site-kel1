@@ -23,11 +23,9 @@ const creditScoreApi = axios.create({
 coreApi.interceptors.request.use((config) => {
   try {
     if (typeof window !== "undefined") {
-      // Allow opting-out from Authorization header
-      const headers = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
-      const skipAuth = headers.get("x-skip-auth") === "true";
+      // Allow opting-out from Authorization header using a custom config flag (not a real HTTP header)
+      const skipAuth = (config as any).skipAuth === true;
       if (skipAuth) {
-        config.headers = headers;
         return config;
       }
       const token = localStorage.getItem("access_token");
@@ -105,7 +103,8 @@ coreApi.interceptors.response.use(
         const response = await coreApi.post(
           "/auth/refresh",
           { refreshToken },
-          { headers: { "x-skip-auth": "true" } }
+          // Use Axios config flag to skip auth logic without sending a custom header (avoids CORS issues)
+          { ...( { skipAuth: true } as any) }
         );
 
         if (response.data.success) {
