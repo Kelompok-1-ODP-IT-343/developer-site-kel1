@@ -1,292 +1,392 @@
-// api.ts
-import axios, {
-  AxiosError,
-  AxiosInstance,
-  InternalAxiosRequestConfig,
-} from "axios";
+import axios, { AxiosHeaders } from "axios";
 
-/** ---------------- Helpers & Types ---------------- */
+// Axios instance untuk seluruh request ke API Satu Atap
+const coreApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  // baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  timeout: 150000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-type AuthAxiosRequestConfig = InternalAxiosRequestConfig & {
-  /** Tandai request yang harus melewati mekanisme auth (mis. /auth/refresh) */
-  skipAuth?: boolean;
-  /** Penanda internal agar interceptor tidak infinite retry */
-  _retry?: boolean;
-};
+// Axios instance khusus untuk refresh token agar tidak terkena loop interceptor
+export const refreshClient = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  timeout: 150000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (token: string) => void;
-  reject: (reason?: any) => void;
-}> = [];
+// Axios instance untuk Credit Score API (Java service)
+const creditScoreApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL || "http://localhost:9009/api/v1",
+  timeout: 10000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-function processQueue(error: any | null, token?: string) {
-  failedQueue.forEach((p) => {
-    if (error) p.reject(error);
-    else if (token) p.resolve(token);
-  });
-  failedQueue = [];
-}
-
-function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("access_token");
-}
-
-function setAccessToken(token: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("access_token", token);
-}
-
-function getRefreshToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("refresh_token");
-}
-
-function setRefreshToken(token: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("refresh_token", token);
-}
-
-function getRefreshExpiresAt(): number | null {
-  if (typeof window === "undefined") return null;
-  const v = localStorage.getItem("refresh_expires_at");
-  return v ? Number(v) : null;
-}
-
-function setRefreshExpiresAt(ts: number) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("refresh_expires_at", String(ts));
-}
-
-function clearTokensAndRedirect() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
-  localStorage.removeItem("refresh_expires_at");
-  window.location.assign("/login");
-}
-
-/** Set Authorization header pada config (kompatibel dgn AxiosHeaders atau object) */
-function setAuthHeaderOnConfig(
-  config: AuthAxiosRequestConfig,
-  token: string
-): void {
-  const hdrs: any = config.headers ?? {};
-  if (typeof hdrs.set === "function") {
-    hdrs.set("Authorization", `Bearer ${token}`);
-    config.headers = hdrs;
-  } else {
-    config.headers = { ...(config.headers || {}), Authorization: `Bearer ${token}` };
+// Cookie helpers
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const value = document.cookie
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${name}=`));
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value.split("=")[1]);
+  } catch {
+    return value.split("=")[1];
   }
 }
 
-/** ---------------- Axios Instances ---------------- */
+function setCookieMaxAge(name: string, value: string, maxAgeSeconds: number) {
+  if (typeof document === "undefined") return;
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const encoded = encodeURIComponent(value);
+  document.cookie = `${name}=${encoded}; max-age=${maxAgeSeconds}; path=/; ${isHttps ? "secure; " : ""}SameSite=Lax`;
+}
 
-// API utama (Satu Atap)
-const coreApi: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1",
-  // baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
-  timeout: 10000,
-  headers: { "Content-Type": "application/json" },
-});
+function deleteCookie(name: string) {
+  if (typeof document === "undefined") return;
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  document.cookie = `${name}=; max-age=0; path=/; ${isHttps ? "secure; " : ""}SameSite=Lax`;
+}
 
-// API Credit Score (Java service)
-const creditScoreApi: AxiosInstance = axios.create({
-  baseURL:
-    process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL ||
-    "http://localhost:9009/api/v1",
-  timeout: 10000,
-  headers: { "Content-Type": "application/json" },
-});
+// Cleanup legacy cookies that are no longer used
+try {
+  if (typeof window !== "undefined") {
+    deleteCookie("access_token");
+    deleteCookie("refresh_token");
+    deleteCookie("refresh_expires_at");
+  }
+} catch {}
 
-/** ---------------- Request Interceptor ---------------- */
-
-coreApi.interceptors.request.use(
-  (config: AuthAxiosRequestConfig) => {
-    try {
-      // Hormati skipAuth: jangan sisipkan Authorization untuk request tertentu
-      if (config.skipAuth) return config;
-
-      const token = getAccessToken();
-      if (token) setAuthHeaderOnConfig(config, token);
-    } catch {
-      // abaikan error akses localStorage saat SSR
+// Interceptor: sisipkan Authorization jika ada token di cookie
+coreApi.interceptors.request.use((config) => {
+  try {
+    if (typeof window !== "undefined") {
+      const headers = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
+      const token = getCookie("token");
+      if (token) {
+        const authHeader = `Bearer ${token}`;
+        if (config.headers instanceof AxiosHeaders) {
+          config.headers.set("Authorization", authHeader);
+        } else {
+          config.headers = new AxiosHeaders(config.headers as any);
+          config.headers.set("Authorization", authHeader);
+        }
+      }
     }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+  } catch (_) {
+    // abaikan jika cookie tidak tersedia
+  }
+  return config;
+});
 
-/** ---------------- Response Interceptor (401 & refresh) ---------------- */
+// Ensure Credit Score API also attaches Authorization from cookie
+creditScoreApi.interceptors.request.use((config) => {
+  try {
+    if (typeof window !== "undefined") {
+      const headers = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
+      const token = getCookie("token");
+      if (token) {
+        const authHeader = `Bearer ${token}`;
+        if (config.headers instanceof AxiosHeaders) {
+          config.headers.set("Authorization", authHeader);
+        } else {
+          config.headers = new AxiosHeaders(config.headers as any);
+          config.headers.set("Authorization", authHeader);
+        }
+      }
+    }
+  } catch (_) {}
+  return config;
+});
 
+// Flag to prevent multiple refresh token requests
+let isRefreshing = false;
+let failedQueue: { resolve: Function; reject: Function }[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// Interceptor response: handle 401 errors and token refresh
 coreApi.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError) => {
-    const originalRequest = (error.config || {}) as AuthAxiosRequestConfig;
+  async (error) => {
+  const originalRequest = error.config;
 
-    // Jangan tangani auth utk request yang bertanda skipAuth (mis. /auth/refresh)
-    if (originalRequest?.skipAuth) {
-      return Promise.reject(error);
-    }
-
-    // Network error tanpa response: jangan paksa logout
-    if (!error.response) {
-      return Promise.reject(error);
-    }
-
-    if (error.response.status === 401) {
-      // Jika request ini sudah dicoba retry setelah refresh -> hard fail & logout
-      if (originalRequest._retry) {
-        clearTokensAndRedirect();
-        return Promise.reject(error);
-      }
-
-      // Jika sudah ada proses refresh di-progres, antrekan request dan tunggu token baru
+    // If error is 401/403 and we haven't tried to refresh the token yet
+    if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
       if (isRefreshing) {
+        // If refresh is already in progress, queue this request
         try {
-          const newToken = await new Promise<string>((resolve, reject) => {
+          const token = await new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
           });
-          originalRequest._retry = true;
-          setAuthHeaderOnConfig(originalRequest, newToken);
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
           return coreApi(originalRequest);
-        } catch (e) {
-          return Promise.reject(e);
+        } catch (err) {
+          return Promise.reject(err);
         }
       }
 
-      // Mulai proses refresh token
       originalRequest._retry = true;
       isRefreshing = true;
 
       try {
-        const refreshToken = getRefreshToken();
-        if (!refreshToken) throw new Error("No refresh token available");
+        // Get the refresh token from cookie
+        const refreshToken = typeof window !== "undefined" ? getCookie("refreshToken") : null;
+        if (!refreshToken) {
+          throw new Error("No refresh token available");
+        }
 
-        const exp = getRefreshExpiresAt();
-        if (exp && Date.now() > exp) throw new Error("Refresh token expired");
-
-        // panggil endpoint refresh dengan skipAuth agar bebas dari auth interceptor
-        const res = await coreApi.post(
+        // Call refresh token endpoint via dedicated client
+        const response = await refreshClient.post(
           "/auth/refresh",
-          { refreshToken },
-          { skipAuth: true } as AuthAxiosRequestConfig
+          { refreshToken }
         );
 
-        const success = (res as any)?.data?.success;
-        const token: string | undefined = (res as any)?.data?.data?.token;
+        const respData = response?.data ?? {};
+        const token = respData?.data?.token ?? respData?.token;
+        const newRefresh = respData?.data?.refreshToken ?? respData?.refreshToken;
+        const isOk = Boolean(token);
+        if (isOk) {
+          if (typeof window !== "undefined") {
+            // Update cookies: token 15 menit, refreshToken 24 jam
+            setCookieMaxAge("token", token, 15 * 60);
+            if (newRefresh) {
+              setCookieMaxAge("refreshToken", newRefresh, 24 * 60 * 60);
+            }
+          }
 
-        if (!success || !token) {
-          throw new Error("Failed to refresh token");
+          // Update authorization header
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
+
+          // Process queued requests
+          processQueue(null, token);
+
+          // Retry the original request
+          return coreApi(originalRequest);
+        } else {
+          processQueue(new Error("Failed to refresh token"));
+          // Clear tokens and redirect to login
+          if (typeof window !== "undefined") {
+            deleteCookie("token");
+            deleteCookie("refreshToken");
+            window.location.href = "/login";
+          }
+          return Promise.reject(error);
         }
-
-        // Simpan token baru
-        setAccessToken(token);
-
-        const newRefresh = (res as any)?.data?.data?.refreshToken as
-          | string
-          | undefined;
-        if (newRefresh) {
-          setRefreshToken(newRefresh);
-          // perpanjang 24 jam (opsional, sesuaikan dgn backend)
-          setRefreshExpiresAt(Date.now() + 24 * 60 * 60 * 1000);
-        }
-
-        // Penting: update default Authorization agar request yang dibuat setelah ini langsung pakai token baru
-        coreApi.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-
-        // Lepaskan antrean request yang menunggu hasil refresh
-        processQueue(null, token);
-
-        // Ulang request asli dengan token baru
-        setAuthHeaderOnConfig(originalRequest, token);
-        return coreApi(originalRequest);
       } catch (refreshError) {
-        processQueue(refreshError, undefined);
-        clearTokensAndRedirect();
+        processQueue(refreshError);
+        // Clear tokens and redirect to login
+        if (typeof window !== "undefined") {
+          deleteCookie("token");
+          deleteCookie("refreshToken");
+          window.location.href = "/login";
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
     }
 
-    // Bukan 401 -> teruskan error
+    // No fallback logout for 401/403 here; only refresh failure triggers logout.
+
     return Promise.reject(error);
   }
 );
 
-/** ---------------- Exports (instances) ---------------- */
+// Apply same refresh logic for creditScoreApi so requests retry after refresh
+creditScoreApi.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
+      if (isRefreshing) {
+        try {
+          const token = await new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          });
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
+          return creditScoreApi(originalRequest);
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      }
+      originalRequest._retry = true;
+      isRefreshing = true;
+      try {
+        const refreshToken = typeof window !== "undefined" ? getCookie("refreshToken") : null;
+        if (!refreshToken) throw new Error("No refresh token available");
+        const response = await refreshClient.post("/auth/refresh", { refreshToken });
+        const respData = response?.data ?? {};
+        const token = respData?.data?.token ?? respData?.token;
+        const newRefresh = respData?.data?.refreshToken ?? respData?.refreshToken;
+        const isOk = Boolean(token);
+        if (isOk) {
+          if (typeof window !== "undefined") {
+            setCookieMaxAge("token", token, 15 * 60);
+            if (newRefresh) setCookieMaxAge("refreshToken", newRefresh, 24 * 60 * 60);
+          }
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
+          processQueue(null, token);
+          return creditScoreApi(originalRequest);
+        } else {
+          processQueue(new Error("Failed to refresh token"));
+          if (typeof window !== "undefined") {
+            deleteCookie("token");
+            deleteCookie("refreshToken");
+            window.location.href = "/login";
+          }
+          return Promise.reject(error);
+        }
+      } catch (refreshError) {
+        processQueue(refreshError);
+        if (typeof window !== "undefined") {
+          deleteCookie("token");
+          deleteCookie("refreshToken");
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default coreApi;
-export { creditScoreApi };
 
-/** ---------------- API Wrappers ---------------- */
-
-// User Profile
+// User Profile API functions
 export const getUserProfile = async () => {
-  const res = await coreApi.get("/user/profile");
-  return res.data;
+  try {
+    const response = await coreApi.get("/user/profile");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching user profile:", error);
+    throw error;
+  }
 };
 
-// KPR Applications progress (Developer)
+// KPR Applications API functions
 export const getKPRApplicationsProgress = async () => {
-  const res = await coreApi.get("/kpr-applications/developer/progress");
-  return res.data;
+  try {
+    const response = await coreApi.get("/kpr-applications/developer/progress");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching KPR applications progress:", error);
+    throw error;
+  }
 };
 
-// KPR Application detail
 export const getKPRApplicationDetail = async (applicationId: string) => {
-  const res = await coreApi.get(`/kpr-applications/${applicationId}`);
-  return res.data;
+  try {
+    const response = await coreApi.get(`/kpr-applications/${applicationId}`);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching KPR application detail:", error);
+    throw error;
+  }
 };
 
-// Approve KPR (Developer)
-export const approveKPRApplication = async (
-  applicationId: string,
-  approvalNotes: string
-) => {
-  const res = await coreApi.post(`/approval/developer`, {
-    isApproved: true,
-    reason: approvalNotes || "",
-    applicationId: parseInt(applicationId, 10),
-  });
-  return res.data;
+export const approveKPRApplication = async (applicationId: string, approvalNotes: string) => {
+  try {
+    const response = await coreApi.post(`/approval/developer`, {
+      isApproved: true,
+      reason: approvalNotes || "",
+      applicationId: parseInt(applicationId)
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error approving KPR application:", error);
+    throw error;
+  }
 };
 
-// Reject KPR (Developer)
-export const rejectKPRApplication = async (
-  applicationId: string,
-  rejectionReason: string
-) => {
-  const res = await coreApi.post(`/approval/developer`, {
-    isApproved: false,
-    reason: rejectionReason || "",
-    applicationId: parseInt(applicationId, 10),
-  });
-  return res.data;
+export const rejectKPRApplication = async (applicationId: string, rejectionReason: string) => {
+  try {
+    const response = await coreApi.post(`/approval/developer`, {
+      isApproved: false,
+      reason: rejectionReason || "",
+      applicationId: parseInt(applicationId)
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error rejecting KPR application:", error);
+    throw error;
+  }
 };
 
-// Credit Score
 export const getCreditScore = async (userId: string) => {
-  const res = await creditScoreApi.post(`/credit-score`, { user_id: userId });
-  return res.data;
+  try {
+    const response = await creditScoreApi.post(`/credit-score`, {
+      user_id: userId
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching credit score:", error);
+    throw error;
+  }
 };
 
-// Credit Recommendation
-// - Ambil detail aplikasi dari coreApi
-// - Kirim ke service rekomendasi di creditScoreApi
+// Credit Recommendation API
+// Convenience wrapper: provide applicationId, this will fetch the application detail
+// from coreApi and post to the recommendation-system endpoint on the credit score API.
 export const getCreditRecommendation = async (applicationId: string) => {
-  const appDetail = await getKPRApplicationDetail(applicationId);
-  const payload = (appDetail as any)?.data ?? appDetail;
+  try {
+    // Fetch application detail first (reusing existing helper which returns response.data)
+    const appDetail = await getKPRApplicationDetail(applicationId);
 
-  const requestBody = {
-    kprApplication: {
-      success: true,
-      message: "KPR application detail retrieved successfully",
-      data: payload,
-    },
-  };
+    // Some endpoints return { success, message, data }, some may return plain
+    const payload = (appDetail as any)?.data ?? appDetail;
 
-  const res = await creditScoreApi.post(`/recommendation-system`, requestBody);
-  return res.data;
+    const requestBody = {
+      kprApplication: {
+        success: true,
+        message: "KPR application detail retrieved successfully",
+        data: payload,
+      },
+    };
+
+    const response = await creditScoreApi.post(`/recommendation-system`, requestBody);
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching credit recommendation:", error);
+    throw error;
+  }
 };
