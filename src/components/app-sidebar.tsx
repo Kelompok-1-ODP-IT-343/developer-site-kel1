@@ -168,29 +168,26 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
             </button>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent side="right" align="start" className="w-56">
-            <DropdownMenuLabel>
-              <div className="flex items-start gap-2">
+          <DropdownMenuContent side="right" align="start" className="w-64 p-0">
+            <DropdownMenuLabel className="px-4 py-3">
+              <div className="flex items-center gap-3">
                 <Image
                   src="/images/avatars/cecilion.png"
                   alt="Profile"
-                  width={36}
-                  height={36}
-                  className="rounded-full"
+                  width={40}
+                  height={40}
+                  className="rounded-full flex-shrink-0"
                 />
-                <div
-                  className="text-gray-700"
-                  style={{ lineHeight: "1", margin: "0", padding: "0" }}
-                >
-                  <p style={{ margin: 0, padding: 0, lineHeight: "1", fontSize: "12px" }}>
-                    <span style={{ fontWeight: 600, color: "#374151" }}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
                       {loading ? "Loading..." : userProfile?.fullName || "User"}
+                    </p>
+                    <span className="rounded-full bg-gray-100 dark:bg-gray-800 text-[10px] uppercase tracking-wide text-gray-700 dark:text-gray-300 px-2 py-0.5">
+                      {loading ? "" : (userProfile?.roleName || "User")}
                     </span>
-                  </p>
-                  <p style={{ margin: 0, padding: 0, lineHeight: "1", fontSize: "12px", color: "#4b5563" }}>
-                    {loading ? "Loading..." : userProfile?.roleName || "User"}
-                  </p>
-                  <p style={{ margin: 0, padding: 0, lineHeight: "1", fontSize: "12px", color: "#6b7280" }}>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {loading ? "Loading..." : userProfile?.email || "user@example.com"}
                   </p>
                 </div>
