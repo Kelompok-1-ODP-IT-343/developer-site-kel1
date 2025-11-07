@@ -13,7 +13,10 @@ import {
   ResponsiveContainer,
   LabelList,
   ComposedChart,
+  AreaChart,
+  Area,
 } from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { customers } from "@/components/data/history";
 import { properties } from "@/components/data/properties";
 
@@ -124,12 +127,25 @@ export default function ChartsSection() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* 1) Funnel Status Aplikasi */}
-      <ChartCard title="Funnel Status Aplikasi">
+      <ChartCard title="Funnel Status Aplikasi (YTD)">
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={funnelRaw} layout="vertical" margin={{ left: 12, right: 12 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
-            <XAxis type="number" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
-            <YAxis type="category" dataKey="name" stroke={COLORS.gray} tick={{ fontSize: 12 }} width={120} />
+            <XAxis
+              type="number"
+              stroke={COLORS.gray}
+              tick={{ fontSize: 12 }}
+              domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
+              label={{ value: "Jumlah Aplikasi", position: "insideBottomRight", offset: -8 }}
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              stroke={COLORS.gray}
+              tick={{ fontSize: 12 }}
+              width={120}
+              label={{ value: "Tahap", angle: -90, position: "insideLeft" }}
+            />
             <Tooltip formatter={(v: number) => v.toLocaleString("id-ID")} />
             <defs>
               <linearGradient id="funnelGrad" x1="0" y1="0" x2="1" y2="0">
@@ -145,12 +161,23 @@ export default function ChartsSection() {
       </ChartCard>
 
       {/* 2) Aging & SLA Bucket (Approved) */}
-      <ChartCard title="Aging & SLA Bucket (Approved)">
+      <ChartCard title="Aging & SLA Bucket (Approved) (YTD)">
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={slaData} margin={{ left: 8, right: 12 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
-            <XAxis dataKey="bucket" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
-            <YAxis stroke={COLORS.gray} tick={{ fontSize: 12 }} allowDecimals={false} />
+            <XAxis
+              dataKey="bucket"
+              stroke={COLORS.gray}
+              tick={{ fontSize: 12 }}
+              label={{ value: "Bucket SLA", position: "insideBottom", offset: -5 }}
+            />
+            <YAxis
+              stroke={COLORS.gray}
+              tick={{ fontSize: 12 }}
+              allowDecimals={false}
+              domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
+              label={{ value: "Jumlah Approved", angle: -90, position: "insideLeft" }}
+            />
             <Tooltip formatter={(v: number) => v.toLocaleString("id-ID")} />
             <Bar dataKey="value" radius={[8, 8, 0, 0]}>
               {slaData.map((d, i) => (
@@ -161,35 +188,91 @@ export default function ChartsSection() {
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* 3) Banyak Rumah Diajukan (bar) + Disetujui (line) per Bulan */}
-      <ChartCard title="Pengajuan vs Diterima per Bulan">
-        <ResponsiveContainer width="100%" height={280}>
-          <ComposedChart data={monthlyAgg} margin={{ left: 8, right: 12 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
-            <XAxis dataKey="label" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
-            <YAxis stroke={COLORS.gray} tick={{ fontSize: 12 }} allowDecimals={false} />
-            <Tooltip />
-            {/* Bar utama: banyak pengajuan per bulan */}
-            <Bar dataKey="submitted" name="Diajukan" fill={COLORS.blue} radius={[6, 6, 0, 0]} />
-            {/* Line overlay: banyak yang disetujui */}
-            <Line type="linear" dataKey="accepted" name="Diterima" stroke={COLORS.orange} strokeWidth={3} dot={{ r: 3 }} />
-          </ComposedChart>
-        </ResponsiveContainer>
+      {/* 3) Pengajuan (bar) + Diterima (line) per Bulan - seragam dengan ChartCard */}
+      <ChartCard title="Pengajuan vs Diterima per Bulan (YTD)">
+        {(() => {
+          const chartConfig: ChartConfig = {
+            submitted: { label: "Diajukan", color: COLORS.blue },
+            accepted: { label: "Diterima", color: COLORS.orange },
+          };
+          return (
+            <ChartContainer config={chartConfig} className="h-[280px]">
+              <ComposedChart data={monthlyAgg} margin={{ left: 8, right: 12, top: 10 }}>
+                <CartesianGrid vertical={false} stroke={`${COLORS.gray}33`} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={10}
+                  label={{ value: "Bulan", position: "insideBottom", offset: -5 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
+                  label={{ value: "Jumlah Aplikasi", angle: -90, position: "insideLeft" }}
+                />
+                <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                <Bar dataKey="submitted" fill="var(--color-submitted)" radius={[6, 6, 0, 0]}>
+                  <LabelList position="top" offset={8} className="fill-foreground" fontSize={11} />
+                </Bar>
+                <Line
+                  type="linear"
+                  dataKey="accepted"
+                  stroke="var(--color-accepted)"
+                  strokeWidth={2.5}
+                  dot={{ r: 3 }}
+                />
+              </ComposedChart>
+            </ChartContainer>
+          );
+        })()}
       </ChartCard>
 
       {/* 4) Pendapatan Diajukan vs Didapat per Bulan */}
-      <ChartCard title="Nilai Pengajuan vs Pendapatan per Bulan (Rp)">
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={monthlyAgg} margin={{ left: 8, right: 12 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
-            <XAxis dataKey="label" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
-            <YAxis stroke={COLORS.gray} tick={{ fontSize: 12 }} tickFormatter={(v) => formatShortIdr(v)} />
-            <Tooltip formatter={(v: number) => formatIdr(v)} />
-            {/* Satu warna modern (teal) untuk kedua garis + titik di setiap point */}
-            <Line type="monotone" dataKey="appliedAmount" name="Diajukan (Rp)" stroke={COLORS.blue} strokeWidth={2.5} dot={{ r: 3 }} />
-            <Line type="monotone" dataKey="obtainedAmount" name="Pendapatan (Rp)" stroke={COLORS.blue} strokeOpacity={0.6} strokeWidth={2.5} dot={{ r: 3 }} />
-          </LineChart>
-        </ResponsiveContainer>
+      <ChartCard title="Nilai Pengajuan vs Pendapatan per Bulan (Rp) (YTD)">
+        {(() => {
+          const chartConfig: ChartConfig = {
+            appliedAmount: { label: "Diajukan (Rp)", color: COLORS.blue },
+            obtainedAmount: { label: "Pendapatan (Rp)", color: COLORS.blue },
+          };
+          return (
+            <ChartContainer config={chartConfig} className="h-[280px]">
+              <AreaChart data={monthlyAgg} margin={{ left: 12, right: 12 }}>
+                <CartesianGrid vertical={false} stroke={`${COLORS.gray}33`} />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  label={{ value: "Bulan", position: "insideBottom", offset: -5 }}
+                />
+                <YAxis
+                  tickFormatter={(v) => formatShortIdr(v)}
+                  domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
+                  label={{ value: "Nilai (Rp)", angle: -90, position: "insideLeft" }}
+                />
+                <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
+                <Area
+                  dataKey="appliedAmount"
+                  type="natural"
+                  fill="var(--color-appliedAmount)"
+                  fillOpacity={0.35}
+                  stroke="var(--color-appliedAmount)"
+                  strokeWidth={2}
+                />
+                <Area
+                  dataKey="obtainedAmount"
+                  type="natural"
+                  fill="var(--color-obtainedAmount)"
+                  fillOpacity={0.18}
+                  stroke="var(--color-obtainedAmount)"
+                  strokeOpacity={0.7}
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ChartContainer>
+          );
+        })()}
       </ChartCard>
     </div>
   );
@@ -200,8 +283,14 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
     <section className="rounded-2xl border bg-white dark:bg-neutral-950 dark:border-neutral-800 shadow-sm">
       <div className="px-5 py-3 border-b dark:border-neutral-800">
         <h3
-          className="font-semibold transition-colors duration-300"
-          style={{ fontFamily: "'Inter', sans-serif", color: "hsl(var(--foreground))" }}
+          className="transition-colors duration-300"
+          style={{
+            fontFamily: "'Inter', sans-serif",
+            fontWeight: 500,
+            fontSize: "20px",
+            lineHeight: "1.2",
+            color: "hsl(var(--foreground))",
+          }}
         >
           {title}
         </h3>

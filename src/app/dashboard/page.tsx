@@ -12,8 +12,10 @@ import {
 import { AppSidebar } from "@/components/app-sidebar"
 import { ModeToggle } from "@/components/mode-toggle" // 🌙 import toggle
 
-import AnalyticsDashboard from "@/components/AnalyticsDashboard"
-import ChartsSection from "@/components/ChartsSection"
+import dynamic from "next/dynamic"
+// Dynamic import to ensure Recharts (client-only) chunks are loaded on client, preventing ENOENT vendor chunk errors.
+const AnalyticsDashboard = dynamic(() => import("@/components/AnalyticsDashboard"), { ssr: false })
+const ChartsSection = dynamic(() => import("@/components/ChartsSection"), { ssr: false })
 import ApprovalSection from "@/components/ApprovalSection"
 import ApprovalHistory from "@/components/ApprovalHistory"
 
