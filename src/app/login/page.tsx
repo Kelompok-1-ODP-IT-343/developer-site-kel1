@@ -139,11 +139,11 @@ export default function LoginPage() {
         <Card className="w-full max-w-sm shadow-xl border border-gray-200">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold text-gray-900">
-              BNI KPR - Satu Atap
+              Satu Atap - Developer Login
             </CardTitle>
             <CardDescription className="text-gray-500 text-sm">
               {step === 'credentials'
-                ? 'Please enter your Developer ID and password to login.'
+                ? 'Please enter your ID and password to login.'
                 : 'Enter the 6-digit OTP sent to your registered contact.'}
             </CardDescription>
           </CardHeader>
@@ -237,7 +237,7 @@ export default function LoginPage() {
           </CardContent>
 
           <CardFooter className="text-center text-sm text-gray-500">
-            © 2025 BNI – Satu Atap Admin Dashboard
+            © Kelompok 1 - ODP BNI Batch 343
           </CardFooter>
         </Card>
       </div>

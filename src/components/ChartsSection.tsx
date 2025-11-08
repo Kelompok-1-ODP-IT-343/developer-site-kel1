@@ -26,7 +26,11 @@ const COLORS = {
   orange: "#FF8500",
   lime: "#DDEE59",
   gray: "#757575",
-  slate: "#9CA3AF",
+  slate: "#f83218ff",
+  blueLight: "#B7E5FF",
+  blueMid: "#6FC0FF",
+  blueDark: "#2F8BFF",
+  blueDeep: "#1A54B1",
 };
 
 // Helpers
@@ -113,10 +117,10 @@ const stage1 = Math.max(approvedCount, totalApps);
 const stage2 = Math.max(approvedCount, Math.round(totalApps * 0.75));
 const stage3 = Math.max(approvedCount, Math.round(totalApps * 0.6));
 const funnelRaw = [
-  { name: "Property Appraisal", value: stage1 },
-  { name: "Credit Analysis", value: stage2 },
-  { name: "Final Approval", value: stage3 },
-  { name: "Approved", value: approvedCount },
+  { name: "Property\nAppraisal", value: stage1, fill: COLORS.blueLight },
+  { name: "Credit\nAnalysis", value: stage2, fill: COLORS.blueMid },
+  { name: "Final\nApproval", value: stage3, fill: COLORS.blueDark },
+  { name: "Approved", value: approvedCount, fill: COLORS.blueDeep },
 ];
 // Ensure non-increasing
 for (let i = 1; i < funnelRaw.length; i++) {
@@ -125,35 +129,34 @@ for (let i = 1; i < funnelRaw.length; i++) {
 
 export default function ChartsSection() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 justify-items-center">
+
       {/* 1) Funnel Status Aplikasi */}
       <ChartCard title="Funnel Status Aplikasi (YTD)">
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={funnelRaw} layout="vertical" margin={{ left: 12, right: 12 }}>
+          <BarChart data={funnelRaw} layout="vertical" margin={{ top: 24, bottom: 12, left: 24, right: 24 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
             <XAxis
               type="number"
               stroke={COLORS.gray}
               tick={{ fontSize: 12 }}
               domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
-              label={{ value: "Jumlah Aplikasi", position: "insideBottomRight", offset: -8 }}
+              label={{ value: "Jumlah Aplikasi", position: "insideBottom", offset: -5 }}
             />
             <YAxis
               type="category"
               dataKey="name"
+              interval={0} 
+              tickMargin={4} 
               stroke={COLORS.gray}
-              tick={{ fontSize: 12 }}
-              width={120}
-              label={{ value: "Tahap", angle: -90, position: "insideLeft" }}
+              tick={<FunnelTick />}
+              label={{ value: "Tahap", angle: -90, position: "left", offset: 12 }}
             />
             <Tooltip formatter={(v: number) => v.toLocaleString("id-ID")} />
-            <defs>
-              <linearGradient id="funnelGrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor={COLORS.blue} stopOpacity={0.85} />
-                <stop offset="100%" stopColor={COLORS.lime} stopOpacity={0.85} />
-              </linearGradient>
-            </defs>
-            <Bar dataKey="value" fill="url(#funnelGrad)" radius={[8, 8, 8, 8]}> 
+            <Bar dataKey="value" radius={[0,10,10,0]}>
+              {funnelRaw.map((stage) => (
+                <Cell key={stage.name} fill={stage.fill} />
+              ))}
               <LabelList dataKey="value" position="right" formatter={(v: number) => v.toLocaleString("id-ID")} />
             </Bar>
           </BarChart>
@@ -163,12 +166,13 @@ export default function ChartsSection() {
       {/* 2) Aging & SLA Bucket (Approved) */}
       <ChartCard title="Aging & SLA Bucket (Approved) (YTD)">
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={slaData} margin={{ left: 8, right: 12 }}>
+          <BarChart data={slaData} margin={{ top: 24, bottom: 12, left: 24, right: 24 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
             <XAxis
               dataKey="bucket"
               stroke={COLORS.gray}
               tick={{ fontSize: 12 }}
+              padding={{ left: 0, right: 0 }}                  
               label={{ value: "Bucket SLA", position: "insideBottom", offset: -5 }}
             />
             <YAxis
@@ -176,7 +180,14 @@ export default function ChartsSection() {
               tick={{ fontSize: 12 }}
               allowDecimals={false}
               domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
-              label={{ value: "Jumlah Approved", angle: -90, position: "insideLeft" }}
+              label={{
+                value: "Jumlah Approved",
+                angle: -90,
+                position: "insideLeft", // ← otomatis di tengah
+                style: { textAnchor: "middle" }, 
+                offset: 12
+
+              }}
             />
             <Tooltip formatter={(v: number) => v.toLocaleString("id-ID")} />
             <Bar dataKey="value" radius={[8, 8, 0, 0]}>
@@ -188,33 +199,41 @@ export default function ChartsSection() {
         </ResponsiveContainer>
       </ChartCard>
 
-      {/* 3) Pengajuan (bar) + Diterima (line) per Bulan - seragam dengan ChartCard */}
+      {/* 3) Pengajuan vs Diterima per Bulan (YTD) */}
       <ChartCard title="Pengajuan vs Diterima per Bulan (YTD)">
         {(() => {
           const chartConfig: ChartConfig = {
             submitted: { label: "Diajukan", color: COLORS.blue },
             accepted: { label: "Diterima", color: COLORS.orange },
           };
+
           return (
             <ChartContainer config={chartConfig} className="h-[280px]">
-              <ComposedChart data={monthlyAgg} margin={{ left: 8, right: 12, top: 10 }}>
-                <CartesianGrid vertical={false} stroke={`${COLORS.gray}33`} />
+              <ComposedChart
+                data={monthlyAgg}
+                margin={{ top: 24, bottom: 12, left: 24, right: 24 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
                 <XAxis
                   dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={10}
-                  label={{ value: "Bulan", position: "insideBottom", offset: -5 }}
+                  stroke={COLORS.gray}
+                  tick={{ fontSize: 12 }}
+                  padding={{ left: 0, right: 0 }}
+                  label={{ value: "Bulan", position: "insideBottom", offset: -5, style: { textAnchor: "middle", fontSize: 14 }}}
                 />
                 <YAxis
+                  stroke={COLORS.gray}
+                  tick={{ fontSize: 12 }}
                   allowDecimals={false}
                   domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
-                  label={{ value: "Jumlah Aplikasi", angle: -90, position: "insideLeft" }}
+                  label={{ value: "Jumlah Aplikasi", angle: -90, position: "insideLeft", offset: 12, style: { textAnchor: "middle", fontSize: 14 } }}
                 />
                 <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+
                 <Bar dataKey="submitted" fill="var(--color-submitted)" radius={[6, 6, 0, 0]}>
-                  <LabelList position="top" offset={8} className="fill-foreground" fontSize={11} />
+                  <LabelList position="top" offset={8} className="fill-foreground" fontSize={10} />
                 </Bar>
+
                 <Line
                   type="linear"
                   dataKey="accepted"
@@ -228,41 +247,39 @@ export default function ChartsSection() {
         })()}
       </ChartCard>
 
-      {/* 4) Pendapatan Diajukan vs Didapat per Bulan */}
+      {/* 4) Nilai Pengajuan vs Pendapatan per Bulan (Rp) (YTD) */}
       <ChartCard title="Nilai Pengajuan vs Pendapatan per Bulan (Rp) (YTD)">
         {(() => {
           const chartConfig: ChartConfig = {
             appliedAmount: { label: "Diajukan (Rp)", color: COLORS.blue },
-            obtainedAmount: { label: "Pendapatan (Rp)", color: COLORS.blue },
+            obtainedAmount: { label: "Pendapatan (Rp)", color: COLORS.orange }, // beda warna supaya jelas
           };
+
           return (
             <ChartContainer config={chartConfig} className="h-[280px]">
-              <AreaChart data={monthlyAgg} margin={{ left: 12, right: 12 }}>
-                <CartesianGrid vertical={false} stroke={`${COLORS.gray}33`} />
+              <AreaChart
+                data={monthlyAgg}
+                margin={{ top: 24, bottom: 12, left: 24, right: 24 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
                 <XAxis
                   dataKey="label"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  label={{ value: "Bulan", position: "insideBottom", offset: -5 }}
+                  stroke={COLORS.gray}
+                  tick={{ fontSize: 12 }}
+                  padding={{ left: 0, right: 0 }}
+                  label={{ value: "Bulan", position: "insideBottom", offset: -5, style: { textAnchor: "middle", fontSize: 14 } }}
                 />
                 <YAxis
-                  tickFormatter={(v) => formatShortIdr(v)}
+                  stroke={COLORS.gray}
+                  tick={{ fontSize: 12 }}
+                  tickFormatter={(v: number) => formatShortIdr(v)}
                   domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.07)]}
-                  label={{ value: "Nilai (Rp)", angle: -90, position: "insideLeft" }}
+                  label={{ value: "Nilai (Rp)", angle: -90, position: "insideLeft", style: { textAnchor: "middle", fontSize: 14  } }}
                 />
                 <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
                 <Area
-                  dataKey="appliedAmount"
-                  type="natural"
-                  fill="var(--color-appliedAmount)"
-                  fillOpacity={0.35}
-                  stroke="var(--color-appliedAmount)"
-                  strokeWidth={2}
-                />
-                <Area
                   dataKey="obtainedAmount"
-                  type="natural"
+                  type="monotone"
                   fill="var(--color-obtainedAmount)"
                   fillOpacity={0.18}
                   stroke="var(--color-obtainedAmount)"
@@ -271,16 +288,16 @@ export default function ChartsSection() {
                 />
               </AreaChart>
             </ChartContainer>
-          );
+            );
         })()}
-      </ChartCard>
+        </ChartCard>
     </div>
   );
 }
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border bg-white dark:bg-neutral-950 dark:border-neutral-800 shadow-sm">
+    <section className="w-full rounded-2xl border bg-white dark:bg-neutral-950 dark:border-neutral-800 shadow-sm">
       <div className="px-5 py-3 border-b dark:border-neutral-800">
         <h3
           className="transition-colors duration-300"
@@ -295,7 +312,9 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
           {title}
         </h3>
       </div>
-      <div className="p-4">{children}</div>
+      <div className="px-5 py-5 sm:px-6 sm:py-6">
+        <div className="mx-auto w-full max-w-[520px]">{children}</div>
+      </div>
     </section>
   );
 }
@@ -311,5 +330,29 @@ function formatShortIdr(n: number) {
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} Jt`;
   if (abs >= 1_000) return `${(n / 1_000).toFixed(0)} Rb`;
   return String(n);
+}
+
+function FunnelTick({ x = 0, y = 0, payload }: { x?: number; y?: number; payload?: { value: string } }) {
+  if (!payload) return null;
+  const lines = String(payload.value).split("\n");
+  const lineHeight = 12;
+  const offset = ((lines.length - 1) * lineHeight) / 2;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      {lines.map((line, index) => (
+        <text
+          key={`${payload.value}-${index}`}
+          x={-6}
+          y={index * lineHeight - offset}
+          textAnchor="end"
+          dominantBaseline="central"
+          fill={COLORS.gray}
+          fontSize={10}
+        >
+          {line}
+        </text>
+      ))}
+    </g>
+  );
 }
 

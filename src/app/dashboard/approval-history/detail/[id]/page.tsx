@@ -324,24 +324,27 @@ export default function ApprovalHistoryDetailIntegrated(): JSX.Element {
   return (
     <div className="approval-page min-h-screen bg-white text-gray-700 relative">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-white" style={{ borderColor: colors.blue }}>
-        <div className="max-w-7xl mx-auto flex justify-between items-center px-6 py-4 relative">
+      <header className="sticky top-0 z-10 border-b bg-white/95 backdrop-blur-sm shadow-sm" style={{ borderColor: colors.blue }}>
+        <div className="max-w-7xl mx-auto flex justify-between items-center px-6 py-3 relative">
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-xl overflow-hidden">
+            <div className="h-10 w-10 rounded-lg overflow-hidden shadow-sm ring-2 ring-gray-100">
               <img src="/logo-satuatap.png" alt="Satu Atap Logo" className="h-full w-full object-cover" />
             </div>
-            <div>
-              <h1 className="font-semibold text-lg text-black">KPR Application Detail</h1>
-              <p className="text-xs">Berikut Informasi Detail Aplikasi KPR</p>
+            <div className="flex flex-col">
+              <h3 className="font-medium text-base text-gray-900 tracking-tight">KPR Application Detail</h3>
+              <p className="text-[11px] text-gray-500 font-light">Berikut Informasi Detail Aplikasi KPR</p>
             </div>
           </div>
 
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="absolute right-6 top-3 flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-red-50 hover:text-red-600 transition-all"
-          >
-            <XCircle className="h-6 w-6" /> Close
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800 transition-all duration-200 shadow-sm"
+            >
+              <XCircle className="h-4 w-4" /> 
+              <span className="font-medium">Close</span>
+            </button>
+          </div>
         </div>
       </header>
 
