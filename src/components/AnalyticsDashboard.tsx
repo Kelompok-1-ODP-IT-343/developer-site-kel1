@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -17,6 +17,7 @@ import {
   PolarRadiusAxis,
   Label,
 } from "recharts";
+import { getDeveloperDashboardStats } from "@/lib/coreApi";
 
 const COLORS = {
   teal: "#3FD8D4",
@@ -32,7 +33,7 @@ const MAX_BORROWERS = 20000;
 
 
 export default function AnalyticsKpiRadial() {
-  const [range, setRange] = useState("30d");
+  const [range, setRange] = useState("7d");
   const ranges = ["7d", "30d", "90d", "YTD"];
   type KpiItem = {
     title: string;
@@ -43,38 +44,71 @@ export default function AnalyticsKpiRadial() {
     color: string;
     unit: string;
   };
+  const [kpiData, setKpiData] = useState<KpiItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-type KpiRangeKey = "7d" | "30d" | "90d" | "YTD";
-  // Data KPI per range
-  const kpiRanges = {
-    "7d": [
-      { title: "Approve", subtitle: "Total Approved", value: 15, trend: +3.2, icon: CheckCircle2, color: COLORS.teal, unit: "" },
-      { title: "Reject", subtitle: "Total Rejected", value: 4, trend: -0.8, icon: XCircle, color: COLORS.orange, unit: "" },
-      { title: "Pending", subtitle: "Total Pending", value: 6, trend: +1.5, icon: Hourglass, color: COLORS.lime, unit: "" },
-      { title: "Customers", subtitle: "Nasabah Aktif", value: 2500, trend: +1.2, icon: Users, color: COLORS.teal, unit: "rb" },
-    ],
-    "30d": [
-      { title: "Approve", subtitle: "Total Approved", value: 82, trend: +5.2, icon: CheckCircle2, color: COLORS.teal, unit: "" },
-      { title: "Reject", subtitle: "Total Rejected", value: 18, trend: -1.4, icon: XCircle, color: COLORS.orange, unit: "" },
-      { title: "Pending", subtitle: "Total Pending", value: 27, trend: +3.1, icon: Hourglass, color: COLORS.lime, unit: "" },
-      { title: "Customers", subtitle: "Nasabah Aktif", value: 8200, trend: +2.8, icon: Users, color: COLORS.teal, unit: "rb" },
-    ],
-    "90d": [
-      { title: "Approve", subtitle: "Total Approved", value: 210, trend: +7.9, icon: CheckCircle2, color: COLORS.teal, unit: "" },
-      { title: "Reject", subtitle: "Total Rejected", value: 45, trend: -2.2, icon: XCircle, color: COLORS.orange, unit: "" },
-      { title: "Pending", subtitle: "Total Pending", value: 60, trend: +4.4, icon: Hourglass, color: COLORS.lime, unit: "" },
-      { title: "Customers", subtitle: "Nasabah Aktif", value: 15200, trend: +3.4, icon: Users, color: COLORS.teal, unit: "rb" },
-    ],
-    "YTD": [
-      { title: "Approve", subtitle: "Total Approved", value: 780, trend: +9.8, icon: CheckCircle2, color: COLORS.teal, unit: "" },
-      { title: "Reject", subtitle: "Total Rejected", value: 180, trend: -3.0, icon: XCircle, color: COLORS.orange, unit: "" },
-      { title: "Pending", subtitle: "Total Pending", value: 110, trend: +5.5, icon: Hourglass, color: COLORS.lime, unit: "" },
-      { title: "Customers", subtitle: "Nasabah Aktif", value: 19300, trend: +4.1, icon: Users, color: COLORS.teal, unit: "rb" },
-    ],
-  };
-
-  // Ambil data sesuai range
-  const kpiData: KpiItem[] = kpiRanges[range as KpiRangeKey];
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const stats = await getDeveloperDashboardStats(range);
+        if (!alive) return;
+        const toNum = (v: any) => (typeof v === "number" && isFinite(v) ? v : 0);
+        const kpi = stats.kpi || {};
+        const next: KpiItem[] = [
+          {
+            title: "Approve",
+            subtitle: "Total Approved",
+            value: toNum(kpi?.approved?.value),
+            trend: toNum(kpi?.approved?.percentage_change),
+            icon: CheckCircle2,
+            color: COLORS.teal,
+            unit: "",
+          },
+          {
+            title: "Reject",
+            subtitle: "Total Rejected",
+            value: toNum(kpi?.rejected?.value),
+            trend: toNum(kpi?.rejected?.percentage_change),
+            icon: XCircle,
+            color: COLORS.orange,
+            unit: "",
+          },
+          {
+            title: "Pending",
+            subtitle: "Total Pending",
+            value: toNum(kpi?.pending?.value),
+            trend: toNum(kpi?.pending?.percentage_change),
+            icon: Hourglass,
+            color: COLORS.lime,
+            unit: "",
+          },
+          {
+            title: "Customers",
+            subtitle: "Nasabah Aktif",
+            value: toNum(kpi?.customers?.value),
+            trend: toNum(kpi?.customers?.percentage_change),
+            icon: Users,
+            color: COLORS.teal,
+            unit: "rb",
+          },
+        ];
+        setKpiData(next);
+      } catch (e: any) {
+        if (!alive) return;
+        setError("Gagal memuat KPI");
+        setKpiData([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [range]);
 
 
   return (
@@ -100,9 +134,11 @@ type KpiRangeKey = "7d" | "30d" | "90d" | "YTD";
 
       {/* KPI cards grid */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {kpiData.map((item) => (
-          <KpiCard key={item.title} {...item} />
-        ))}
+        {(loading && kpiData.length === 0) ? (
+          <div className="col-span-4 text-sm text-muted-foreground">Memuat KPI…</div>
+        ) : (
+          kpiData.map((item) => <KpiCard key={item.title} {...item} />)
+        )}
       </section>
     </div>
   );

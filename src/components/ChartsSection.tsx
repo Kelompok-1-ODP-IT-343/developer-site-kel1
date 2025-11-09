@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
+import { getDeveloperDashboardStats } from "@/lib/coreApi";
 
 
 const COLORS = {
@@ -16,36 +18,75 @@ const COLORS = {
   lightBorder: "rgba(117,117,117,0.2)",
 };
 
-const months = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul"];
-
-const growthDemand = months.map((m,i)=>({
-  name:m,
-  approval:[40,65,85,78,102,130,145][i],
-  reject:[10,18,25,32,22,14,20][i],
-}));
-
-const outstandingLoan = months.map((m,i)=>({ name:m, value:[180,260,420,500,610,690,770][i] }));
-
-const funnel = [
-  { name:"Draft", value:280 },
-  { name:"Review", value:190 },
-  { name:"Approval", value:140 },
-  { name:"Reject", value:30 },
-];
-
-const repayment = [
-  { name:"On-time", value:72, color:COLORS.lime },
-  { name:"Late", value:18, color:COLORS.orange },
-  { name:"Default", value:10, color:"#9CA3AF" },
-];
+// Data akan diambil dari backend melalui CoreAPI
 
 export default function ChartsSection() {
+  const [range, setRange] = useState<"7m" | "12m">("7m");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [payload, setPayload] = useState<{
+    growthAndDemand: Array<{ month: string; total_requests: number; total_approved: number }>;
+    outstandingLoan: Array<{ month: string; amount_miliar: number }>;
+    processingFunnel: Array<{ stage: string; count: number }>;
+    userRegistered: Array<{ month: string; count: number }>;
+    timestamp?: string;
+  }>({ growthAndDemand: [], outstandingLoan: [], processingFunnel: [], userRegistered: [], timestamp: undefined });
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const stats = await getDeveloperDashboardStats(range);
+        if (!alive) return;
+        setPayload({
+          growthAndDemand: stats.growthAndDemand || [],
+          outstandingLoan: stats.outstandingLoan || [],
+          processingFunnel: stats.processingFunnel || [],
+          userRegistered: stats.userRegistered || [],
+          timestamp: stats.timestamp,
+        });
+      } catch (e: any) {
+        if (!alive) return;
+        setError("Gagal memuat statistik");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [range]);
+
+  const gdData = useMemo(() => payload.growthAndDemand, [payload]);
+  const loanData = useMemo(() => payload.outstandingLoan, [payload]);
+  const funnelData = useMemo(() => payload.processingFunnel, [payload]);
+  const userRegData = useMemo(() => payload.userRegistered, [payload]);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Selector range */}
+      <div className="lg:col-span-2 flex justify-end">
+        <div className="inline-flex border rounded-lg overflow-hidden bg-white/50 dark:bg-neutral-900">
+          {(["7m","12m"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-3 py-1 text-sm font-medium transition-colors ${
+                range === r
+                  ? "bg-black text-white dark:bg-white dark:text-black"
+                  : "text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
       {/* Growth & Demand */}
       <ChartCard title="Growth & Demand">
         <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={growthDemand}>
+          <AreaChart data={gdData}>
             <defs>
               <linearGradient id="gradBlue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={COLORS.blue} stopOpacity={0.4} />
@@ -57,11 +98,11 @@ export default function ChartsSection() {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
-            <XAxis dataKey="name" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
+            <XAxis dataKey="month" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
             <YAxis stroke={COLORS.gray} tick={{ fontSize: 12 }} />
             <Tooltip />
-            <Area type="monotone" dataKey="approval" name="Approval" stroke={COLORS.orange} fill="url(#gradOrange)" />
-            <Area type="monotone" dataKey="reject" name="Reject" stroke={COLORS.blue} fill="url(#gradBlue)" />
+            <Area type="monotone" dataKey="total_approved" name="Approved" stroke={COLORS.orange} fill="url(#gradOrange)" />
+            <Area type="monotone" dataKey="total_requests" name="Requests" stroke={COLORS.blue} fill="url(#gradBlue)" />
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -69,12 +110,12 @@ export default function ChartsSection() {
       {/* Outstanding Loan */}
       <ChartCard title="Outstanding Loan (Miliar Rupiah)">
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={outstandingLoan}>
+          <LineChart data={loanData}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
-            <XAxis dataKey="name" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
+            <XAxis dataKey="month" stroke={COLORS.gray} tick={{ fontSize: 12 }} />
             <YAxis stroke={COLORS.gray} tick={{ fontSize: 12 }} />
             <Tooltip />
-            <Line type="monotone" dataKey="value" stroke={COLORS.blue} strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey="amount_miliar" stroke={COLORS.blue} strokeWidth={3} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -82,13 +123,13 @@ export default function ChartsSection() {
       {/* Funnel */}
       <ChartCard title="Processing Funnel">
         <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={funnel}>
+          <BarChart data={funnelData}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
-            <XAxis dataKey="name" stroke={COLORS.gray} />
+            <XAxis dataKey="stage" stroke={COLORS.gray} />
 
             {(() => {
               // ambil nilai max funnel dan tambah 50
-              const maxValue = Math.max(...funnel.map((d) => d.value));
+              const maxValue = Math.max(...funnelData.map((d) => d.count), 0);
               const upperLimit = maxValue + 50;
 
               // buat ticks otomatis tiap 70 (atau sesuaikan)
@@ -110,7 +151,7 @@ export default function ChartsSection() {
             })()}
 
             <Tooltip />
-            <Bar dataKey="value" radius={[10,10,0,0]}>
+            <Bar dataKey="count" radius={[10,10,0,0]}>
               <Cell fill={COLORS.blue} />
               <Cell fill={COLORS.orange} />
               <Cell fill={COLORS.lime} />
@@ -128,29 +169,11 @@ export default function ChartsSection() {
           <div className="mx-auto aspect-square max-h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart
-                data={[
-                  { month: "January", pegawai: 186, nonPegawai: 160 },
-                  { month: "February", pegawai: 185, nonPegawai: 170 },
-                  { month: "March", pegawai: 207, nonPegawai: 180 },
-                  { month: "April", pegawai: 173, nonPegawai: 160 },
-                  { month: "May", pegawai: 160, nonPegawai: 190 },
-                  { month: "June", pegawai: 174, nonPegawai: 204 },
-                ]}
+                data={userRegData}
               >
                 <PolarGrid radialLines={false} />
                 <PolarAngleAxis dataKey="month" />
-                <Radar
-                  dataKey="pegawai"
-                  stroke="#FF8500"
-                  strokeWidth={3}
-                  fillOpacity={0}
-                />
-                <Radar
-                  dataKey="nonPegawai"
-                  stroke="#3FD8D4"
-                  strokeWidth={3}
-                  fillOpacity={0}
-                />
+                <Radar dataKey="count" stroke="#3FD8D4" strokeWidth={3} fillOpacity={0} />
                 <Tooltip />
               </RadarChart>
             </ResponsiveContainer>

@@ -268,3 +268,68 @@ export const getCreditRecommendation = async (applicationId: string) => {
     throw error;
   }
 };
+
+// Developer Dashboard Stats
+// Fetches statistics for the developer dashboard.
+// Example endpoint: GET /stat-developer/dashboard?range=7m
+// Ensures all numeric fields default to 0 when null/undefined.
+export const getDeveloperDashboardStats = async (range?: string) => {
+  try {
+    const response = await coreApi.get(`/stat-developer/dashboard`, {
+      params: range ? { range } : undefined,
+    });
+
+    // Support both wrapped and direct payloads
+    const raw = (response.data && (response.data.data ?? response.data)) || {};
+
+    const toNum = (v: any) => (typeof v === "number" && isFinite(v) ? v : 0);
+    const toStr = (v: any) => (typeof v === "string" ? v : "");
+    const arr = (v: any) => (Array.isArray(v) ? v : []);
+
+    const kpiRaw = raw.kpi || {};
+
+    const normalized = {
+      timestamp: toStr(raw.timestamp) || new Date().toISOString(),
+      kpi: {
+        approved: {
+          value: toNum(kpiRaw?.approved?.value),
+          percentage_change: toNum(kpiRaw?.approved?.percentage_change),
+        },
+        rejected: {
+          value: toNum(kpiRaw?.rejected?.value),
+          percentage_change: toNum(kpiRaw?.rejected?.percentage_change),
+        },
+        pending: {
+          value: toNum(kpiRaw?.pending?.value),
+          percentage_change: toNum(kpiRaw?.pending?.percentage_change),
+        },
+        customers: {
+          value: toNum(kpiRaw?.customers?.value),
+          percentage_change: toNum(kpiRaw?.customers?.percentage_change),
+        },
+      },
+      growthAndDemand: arr(raw.growthAndDemand).map((d: any) => ({
+        month: toStr(d?.month),
+        total_requests: toNum(d?.total_requests),
+        total_approved: toNum(d?.total_approved),
+      })),
+      outstandingLoan: arr(raw.outstandingLoan).map((d: any) => ({
+        month: toStr(d?.month),
+        amount_miliar: toNum(d?.amount_miliar),
+      })),
+      processingFunnel: arr(raw.processingFunnel).map((d: any) => ({
+        stage: toStr(d?.stage),
+        count: toNum(d?.count),
+      })),
+      userRegistered: arr(raw.userRegistered).map((d: any) => ({
+        month: toStr(d?.month),
+        count: toNum(d?.count),
+      })),
+    };
+
+    return normalized;
+  } catch (error) {
+    console.error("Error fetching developer dashboard stats:", error);
+    throw error;
+  }
+};
