@@ -44,6 +44,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - Logout clears both tokens and the refresh metadata.
 
 Endpoints used (relative to `NEXT_PUBLIC_API_URL`):
+
 - `POST /auth/login` or `POST /auth/verify-otp` to obtain tokens
 - `POST /auth/refresh` to refresh the access token
 - `POST /auth/logout` to end the session

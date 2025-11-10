@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -19,6 +20,7 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { customers } from "@/components/data/history";
 import { properties } from "@/components/data/properties";
+import { getDeveloperDashboardStats } from "@/lib/coreApi";
 
 // Color palette: use existing brand colors
 const COLORS = {
@@ -128,6 +130,48 @@ for (let i = 1; i < funnelRaw.length; i++) {
 }
 
 export default function ChartsSection() {
+  const [range, setRange] = useState<"7m" | "12m">("7m");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [payload, setPayload] = useState<{
+    growthAndDemand: Array<{ month: string; total_requests: number; total_approved: number }>;
+    outstandingLoan: Array<{ month: string; amount_miliar: number }>;
+    processingFunnel: Array<{ stage: string; count: number }>;
+    userRegistered: Array<{ month: string; count: number }>;
+    timestamp?: string;
+  }>({ growthAndDemand: [], outstandingLoan: [], processingFunnel: [], userRegistered: [], timestamp: undefined });
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const stats = await getDeveloperDashboardStats(range);
+        if (!alive) return;
+        setPayload({
+          growthAndDemand: stats.growthAndDemand || [],
+          outstandingLoan: stats.outstandingLoan || [],
+          processingFunnel: stats.processingFunnel || [],
+          userRegistered: stats.userRegistered || [],
+          timestamp: stats.timestamp,
+        });
+      } catch (e: any) {
+        if (!alive) return;
+        setError("Gagal memuat statistik");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [range]);
+
+  const gdData = useMemo(() => payload.growthAndDemand, [payload]);
+  const loanData = useMemo(() => payload.outstandingLoan, [payload]);
+  const funnelData = useMemo(() => payload.processingFunnel, [payload]);
+  const userRegData = useMemo(() => payload.userRegistered, [payload]);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 justify-items-center">
 
@@ -146,8 +190,8 @@ export default function ChartsSection() {
             <YAxis
               type="category"
               dataKey="name"
-              interval={0} 
-              tickMargin={4} 
+              interval={0}
+              tickMargin={4}
               stroke={COLORS.gray}
               tick={<FunnelTick />}
               label={{ value: "Tahap", angle: -90, position: "left", offset: 12 }}
@@ -172,7 +216,7 @@ export default function ChartsSection() {
               dataKey="bucket"
               stroke={COLORS.gray}
               tick={{ fontSize: 12 }}
-              padding={{ left: 0, right: 0 }}                  
+              padding={{ left: 0, right: 0 }}
               label={{ value: "Bucket SLA", position: "insideBottom", offset: -5 }}
             />
             <YAxis
@@ -184,7 +228,7 @@ export default function ChartsSection() {
                 value: "Jumlah Approved",
                 angle: -90,
                 position: "insideLeft", // ← otomatis di tengah
-                style: { textAnchor: "middle" }, 
+                style: { textAnchor: "middle" },
                 offset: 12
 
               }}
