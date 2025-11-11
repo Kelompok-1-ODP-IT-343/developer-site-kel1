@@ -2,9 +2,18 @@ import axios, { AxiosHeaders } from "axios";
 
 // Axios instance untuk seluruh request ke API Satu Atap
 const coreApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
   // baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
-  timeout: 10000,
+  timeout: 150000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// Axios instance khusus untuk refresh token agar tidak terkena loop interceptor
+export const refreshClient = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  timeout: 150000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -19,18 +28,49 @@ const creditScoreApi = axios.create({
   },
 });
 
-// Interceptor: sisipkan Authorization jika ada token di localStorage
+// Cookie helpers
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const value = document.cookie
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith(`${name}=`));
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value.split("=")[1]);
+  } catch {
+    return value.split("=")[1];
+  }
+}
+
+function setCookieMaxAge(name: string, value: string, maxAgeSeconds: number) {
+  if (typeof document === "undefined") return;
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  const encoded = encodeURIComponent(value);
+  document.cookie = `${name}=${encoded}; max-age=${maxAgeSeconds}; path=/; ${isHttps ? "secure; " : ""}SameSite=Lax`;
+}
+
+function deleteCookie(name: string) {
+  if (typeof document === "undefined") return;
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+  document.cookie = `${name}=; max-age=0; path=/; ${isHttps ? "secure; " : ""}SameSite=Lax`;
+}
+
+// Cleanup legacy cookies that are no longer used
+try {
+  if (typeof window !== "undefined") {
+    deleteCookie("access_token");
+    deleteCookie("refresh_token");
+    deleteCookie("refresh_expires_at");
+  }
+} catch {}
+
+// Interceptor: sisipkan Authorization jika ada token di cookie
 coreApi.interceptors.request.use((config) => {
   try {
     if (typeof window !== "undefined") {
-      // Allow opting-out from Authorization header
       const headers = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
-      const skipAuth = headers.get("x-skip-auth") === "true";
-      if (skipAuth) {
-        config.headers = headers;
-        return config;
-      }
-      const token = localStorage.getItem("access_token");
+      const token = getCookie("token");
       if (token) {
         const authHeader = `Bearer ${token}`;
         if (config.headers instanceof AxiosHeaders) {
@@ -42,8 +82,28 @@ coreApi.interceptors.request.use((config) => {
       }
     }
   } catch (_) {
-    // abaikan jika localStorage tidak tersedia
+    // abaikan jika cookie tidak tersedia
   }
+  return config;
+});
+
+// Ensure Credit Score API also attaches Authorization from cookie
+creditScoreApi.interceptors.request.use((config) => {
+  try {
+    if (typeof window !== "undefined") {
+      const headers = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
+      const token = getCookie("token");
+      if (token) {
+        const authHeader = `Bearer ${token}`;
+        if (config.headers instanceof AxiosHeaders) {
+          config.headers.set("Authorization", authHeader);
+        } else {
+          config.headers = new AxiosHeaders(config.headers as any);
+          config.headers.set("Authorization", authHeader);
+        }
+      }
+    }
+  } catch (_) {}
   return config;
 });
 
@@ -68,15 +128,20 @@ coreApi.interceptors.response.use(
   async (error) => {
   const originalRequest = error.config;
 
-    // If error is 401 and we haven't tried to refresh the token yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // If error is 401/403 and we haven't tried to refresh the token yet
+    if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
       if (isRefreshing) {
         // If refresh is already in progress, queue this request
         try {
           const token = await new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });
           });
-          originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
           return coreApi(originalRequest);
         } catch (err) {
           return Promise.reject(err);
@@ -87,40 +152,38 @@ coreApi.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Get the refresh token from storage
-        const refreshToken = typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null;
+        // Get the refresh token from cookie
+        const refreshToken = typeof window !== "undefined" ? getCookie("refreshToken") : null;
         if (!refreshToken) {
           throw new Error("No refresh token available");
         }
 
-        // Optional client-side 24h policy: stop if refresh appears expired
-        if (typeof window !== "undefined") {
-          const expStr = localStorage.getItem("refresh_expires_at");
-          if (expStr && Date.now() > Number(expStr)) {
-            throw new Error("Refresh token expired");
-          }
-        }
-
-        // Call refresh token endpoint
-        const response = await coreApi.post(
+        // Call refresh token endpoint via dedicated client
+        const response = await refreshClient.post(
           "/auth/refresh",
-          { refreshToken },
-          { headers: { "x-skip-auth": "true" } }
+          { refreshToken }
         );
 
-        if (response.data.success) {
-          const { token } = response.data.data;
+        const respData = response?.data ?? {};
+        const token = respData?.data?.token ?? respData?.token;
+        const newRefresh = respData?.data?.refreshToken ?? respData?.refreshToken;
+        const isOk = Boolean(token);
+        if (isOk) {
           if (typeof window !== "undefined") {
-            localStorage.setItem("access_token", token);
-            // If API also returns new refresh token, persist it and bump expiry window to 24h
-            if (response.data?.data?.refreshToken) {
-              localStorage.setItem("refresh_token", response.data.data.refreshToken);
-              localStorage.setItem("refresh_expires_at", String(Date.now() + 24 * 60 * 60 * 1000));
+            // Update cookies: token 15 menit, refreshToken 24 jam
+            setCookieMaxAge("token", token, 15 * 60);
+            if (newRefresh) {
+              setCookieMaxAge("refreshToken", newRefresh, 24 * 60 * 60);
             }
           }
 
           // Update authorization header
-          originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
 
           // Process queued requests
           processQueue(null, token);
@@ -131,9 +194,8 @@ coreApi.interceptors.response.use(
           processQueue(new Error("Failed to refresh token"));
           // Clear tokens and redirect to login
           if (typeof window !== "undefined") {
-            localStorage.removeItem("access_token");
-            localStorage.removeItem("refresh_token");
-            localStorage.removeItem("refresh_expires_at");
+            deleteCookie("token");
+            deleteCookie("refreshToken");
             window.location.href = "/login";
           }
           return Promise.reject(error);
@@ -142,9 +204,8 @@ coreApi.interceptors.response.use(
         processQueue(refreshError);
         // Clear tokens and redirect to login
         if (typeof window !== "undefined") {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-          localStorage.removeItem("refresh_expires_at");
+          deleteCookie("token");
+          deleteCookie("refreshToken");
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);
@@ -153,17 +214,78 @@ coreApi.interceptors.response.use(
       }
     }
 
-    // If error is still 401 after refresh attempt, or any other error
-    if (error.response?.status === 401) {
-      // Clear tokens and redirect to login
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        localStorage.removeItem("refresh_expires_at");
-        window.location.href = "/login";
+    // No fallback logout for 401/403 here; only refresh failure triggers logout.
+
+    return Promise.reject(error);
+  }
+);
+
+// Apply same refresh logic for creditScoreApi so requests retry after refresh
+creditScoreApi.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if ((error.response?.status === 401 || error.response?.status === 403) && !originalRequest._retry) {
+      if (isRefreshing) {
+        try {
+          const token = await new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          });
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
+          return creditScoreApi(originalRequest);
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      }
+      originalRequest._retry = true;
+      isRefreshing = true;
+      try {
+        const refreshToken = typeof window !== "undefined" ? getCookie("refreshToken") : null;
+        if (!refreshToken) throw new Error("No refresh token available");
+        const response = await refreshClient.post("/auth/refresh", { refreshToken });
+        const respData = response?.data ?? {};
+        const token = respData?.data?.token ?? respData?.token;
+        const newRefresh = respData?.data?.refreshToken ?? respData?.refreshToken;
+        const isOk = Boolean(token);
+        if (isOk) {
+          if (typeof window !== "undefined") {
+            setCookieMaxAge("token", token, 15 * 60);
+            if (newRefresh) setCookieMaxAge("refreshToken", newRefresh, 24 * 60 * 60);
+          }
+          if (originalRequest.headers instanceof AxiosHeaders) {
+            (originalRequest.headers as AxiosHeaders).set("Authorization", `Bearer ${token}`);
+          } else {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers["Authorization"] = `Bearer ${token}`;
+          }
+          processQueue(null, token);
+          return creditScoreApi(originalRequest);
+        } else {
+          processQueue(new Error("Failed to refresh token"));
+          if (typeof window !== "undefined") {
+            deleteCookie("token");
+            deleteCookie("refreshToken");
+            window.location.href = "/login";
+          }
+          return Promise.reject(error);
+        }
+      } catch (refreshError) {
+        processQueue(refreshError);
+        if (typeof window !== "undefined") {
+          deleteCookie("token");
+          deleteCookie("refreshToken");
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
-
     return Promise.reject(error);
   }
 );

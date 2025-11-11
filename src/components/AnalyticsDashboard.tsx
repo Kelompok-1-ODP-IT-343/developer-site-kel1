@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   XCircle,
-  Percent,
   Users,
   TrendingUp,
   TrendingDown,
@@ -26,11 +25,10 @@ const COLORS = {
   red: "#ef4444",
   green: "#22c55e",
   ringBg: "#e5e7eb",
-  darkRingBg: "#1f293799", // hitam keabu-abuan
+  darkRingBg: "#1f293799",
 };
 
 const MAX_BORROWERS = 20000;
-
 
 export default function AnalyticsKpiRadial() {
   const [range, setRange] = useState("7d");
@@ -42,7 +40,7 @@ export default function AnalyticsKpiRadial() {
     trend: number;
     icon: any;
     color: string;
-    unit: string;
+    unit: string; // "" | "%" | "rb"
   };
   const [kpiData, setKpiData] = useState<KpiItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,7 +110,13 @@ export default function AnalyticsKpiRadial() {
 
 
   return (
-    <div className="space-y-6">
+    // NEW: bungkus dengan container tanpa padding kiri-kanan agar “Tahap” benar-benar nempel ke batas container
+    <section className="w-full mx-auto max-w-7xl px-0 space-y-4">
+      {/* NEW: Judul seksi “Tahap” flush-left */}
+      <h2 className="text-sm font-semibold tracking-wide uppercase text-gray-500 dark:text-gray-400">
+        Tahap
+      </h2>
+
       {/* Toggle range */}
       <div className="flex justify-end">
         <div className="inline-flex border rounded-lg overflow-hidden bg-white/50 dark:bg-neutral-900">
@@ -140,7 +144,7 @@ export default function AnalyticsKpiRadial() {
           kpiData.map((item) => <KpiCard key={item.title} {...item} />)
         )}
       </section>
-    </div>
+    </section>
   );
 }
 
@@ -158,7 +162,7 @@ function KpiCard({
       ? value
       : unit === "rb"
       ? Math.min((value / MAX_BORROWERS) * 100, 100)
-      : value;
+      : Math.min(value, 100); // jaga-jaga kalau value > 100
 
   const chartData = [
     { name: "progress", value: progress, fill: color },
@@ -166,20 +170,21 @@ function KpiCard({
   ];
 
   return (
-    <div className="relative bg-white dark:bg-neutral-950 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all duration-200 p-5 flex flex-col justify-between items-center">
+    <div className="relative bg-white dark:bg-neutral-950 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all duration-200 p-5 flex flex-col items-center">
       {/* Header */}
       <div className="flex w-full items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Icon className="h-5 w-5 text-gray-400 dark:text-gray-300" />
           <h3
-            className="text-[12px] font-medium text-gray-600 dark:text-white"
-            style={{ fontFamily: "'Inter', sans-serif", fontWeight: 500, fontSize: "20px", lineHeight: "1.2" , color: "var(--kpi-title-color)"}}
+            className="font-medium text-gray-700 dark:text-white"
+            style={{
+              fontFamily: "'Inter', sans-serif",
+              fontSize: "20px",
+              lineHeight: "1.2",
+            }}
           >
             {title}
           </h3>
-
-
-
         </div>
 
         <div
@@ -207,67 +212,64 @@ function KpiCard({
           <RadialBarChart
             cx="50%"
             cy="50%"
-            innerRadius="75%"   // bisa dikurangi agar bagian dalam lebih kecil, mempertebal ring
+            innerRadius="75%"
             outerRadius="100%"
-            barSize={45}        // naikkan dari 15 jadi 30 agar ring lebih tebal
+            barSize={45}
             data={chartData}
             startAngle={90}
             endAngle={-270}
           >
-            {/* Layer 1: background hitam */}
-            <RadialBar
-              dataKey="value"
-              cornerRadius={15}
-              fill={COLORS.darkRingBg}
-              data={[{ value: 100 }]}
-            />
-            {/* Layer 2: progress berwarna */}
-            <RadialBar
-              dataKey="value"
-              cornerRadius={15}
-              fill={color}
-              data={[{ value: progress }]}
-            />
+            {/* background ring */}
+            <RadialBar dataKey="value" cornerRadius={15} fill={COLORS.darkRingBg} data={[{ value: 100 }]} />
+            {/* progress ring */}
+            <RadialBar dataKey="value" cornerRadius={15} fill={color} data={[{ value: progress }]} />
+
+            {/* NEW: tampilkan label judul KPI (mis. “Credit Analysis”) di atas angka */}
             <PolarRadiusAxis tick={false} axisLine={false} stroke="none">
               <Label
                 content={({ viewBox }) => {
                   if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                    const { cx, cy } = viewBox;
+                    const { cx, cy } = viewBox as { cx: number; cy: number };
+
+                    const formatted =
+                      unit === "%"
+                        ? `${value}%`
+                        : unit === "rb"
+                        ? `${(value / 1000).toFixed(1)} rb`
+                        : value.toLocaleString("id-ID");
+
                     return (
-                      <>
-                        <text
+                      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
+                        {/* NEW: label atas (judul KPI) */}
+                        <tspan
                           x={cx}
-                          y={cy}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
+                          y={cy - 20}
+                          className="fill-gray-500 dark:fill-gray-400 text-[10px] tracking-wide uppercase"
                         >
-                          <tspan
-                            x={cx}
-                            y={cy}
-                            className="fill-black dark:fill-white text-3xl font-bold"
-                          >
-                            {unit === "%"
-                              ? `${value}%`
-                              : unit === "rb"
-                              ? `${(value / 1000).toFixed(1)} rb`
-                              : value.toLocaleString("id-ID")}
-                          </tspan>
-                          <tspan
-                            x={cx}
-                            y={(cy || 0) + 22}
-                            className="fill-gray-500 dark:fill-gray-400 text-xs"
-                          >
-                            {subtitle}
-                          </tspan>
-                        </text>
-                      </>
+                          {title}
+                        </tspan>
+
+                        {/* angka utama */}
+                        <tspan x={cx} y={cy + 2} className="fill-black dark:fill-white text-3xl font-bold">
+                          {formatted}
+                        </tspan>
+
+                        {/* subjudul */}
+                        <tspan
+                          x={cx}
+                          y={cy + 22}
+                          className="fill-gray-500 dark:fill-gray-400 text-xs"
+                        >
+                          {subtitle}
+                        </tspan>
+                      </text>
                     );
                   }
+                  return null;
                 }}
               />
             </PolarRadiusAxis>
           </RadialBarChart>
-
         </ResponsiveContainer>
       </div>
     </div>

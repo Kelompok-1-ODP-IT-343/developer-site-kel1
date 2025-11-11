@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { initiateLogin, verifyOtpLogin } from '@/services/auth';
+import { initiateLogin, verifyOtpLogin, getCurrentUser, getRefreshToken, refreshAccessToken } from '@/services/auth';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import React from 'react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,6 +25,33 @@ export default function LoginPage() {
   const [otp, setOtp] = useState('');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+
+  // Jika sudah login (punya token valid) atau bisa refresh, langsung mantul ke dashboard
+  // Hindari user melihat halaman login saat sesi masih aktif.
+  React.useEffect(() => {
+    let cancelled = false;
+    async function checkAndRedirect() {
+      try {
+        const user = getCurrentUser();
+        if (user && !cancelled) {
+          router.replace('/dashboard');
+          return;
+        }
+        // Jika token tidak valid tapi refreshToken masih ada, coba refresh diam-diam
+        const rt = getRefreshToken();
+        if (rt) {
+          const res = await refreshAccessToken();
+          if (res.success && !cancelled) {
+            router.replace('/dashboard');
+          }
+        }
+      } catch (_) {
+        // Biarkan user tetap di halaman login jika gagal
+      }
+    }
+    void checkAndRedirect();
+    return () => { cancelled = true; };
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,11 +139,11 @@ export default function LoginPage() {
         <Card className="w-full max-w-sm shadow-xl border border-gray-200">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold text-gray-900">
-              BNI KPR - Satu Atap
+              Satu Atap - Developer Login
             </CardTitle>
             <CardDescription className="text-gray-500 text-sm">
               {step === 'credentials'
-                ? 'Please enter your Developer ID and password to login.'
+                ? 'Please enter your ID and password to login.'
                 : 'Enter the 6-digit OTP sent to your registered contact.'}
             </CardDescription>
           </CardHeader>
@@ -209,7 +237,7 @@ export default function LoginPage() {
           </CardContent>
 
           <CardFooter className="text-center text-sm text-gray-500">
-            © 2025 BNI – Satu Atap Admin Dashboard
+            © Kelompok 1 - ODP BNI Batch 343
           </CardFooter>
         </Card>
       </div>

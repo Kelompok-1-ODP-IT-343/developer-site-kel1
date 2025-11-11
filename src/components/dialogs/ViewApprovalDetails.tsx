@@ -125,12 +125,6 @@ export default function ViewApprovalDetails({
             <span className="text-muted-foreground">Alamat</span>
             <span className="font-medium text-right w-[55%]">{data.address}</span>
           </div>
-          <div className="flex justify-between border-b pb-1">
-            <span className="text-muted-foreground">Jumlah Pinjaman</span>
-            <span className="font-medium">
-              {data.price > 0 ? formatCurrency(data.price) : "-"}
-            </span>
-          </div>
           <div className="flex justify-between border-b pb-1 items-center">
             <span className="text-muted-foreground">Status</span>
             <span

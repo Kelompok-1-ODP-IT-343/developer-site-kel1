@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import coreApi from "@/lib/coreApi"
+import { useRouter } from "next/navigation"
+import { Eye } from "lucide-react"
 
 // Lazy load dialog agar tidak berat di awal
 const ViewApprovalDetails = React.lazy(() => import("@/components/dialogs/ViewApprovalDetails"))
@@ -149,27 +151,10 @@ export default function ApprovalHistory() {
       cell: ({ row }) => <div>{row.getValue("property_name")}</div>,
     },
     {
-      accessorKey: "address",
-      header: () => <div className="font-semibold">Alamat</div>,
-      cell: ({ row }) => <div className="text-sm">{row.getValue("address")}</div>,
-    },
-    {
-      accessorKey: "price",
-      header: () => <div className="font-semibold">Jumlah Pinjaman</div>,
-      cell: ({ row }) => {
-        const price = row.getValue("price") as number
-        return (
-          <div className="font-medium">
-            {formatCurrency(price)}
-          </div>
-        )
-      },
-    },
-    {
       accessorKey: "approval_date",
-      header: () => <div className="font-medium">Tanggal Pengajuan</div>,
+      header: () => <div className="font-semibold">Tanggal Pengajuan</div>,
       cell: ({ row }) => (
-        <div className="font-semibold">{formatDate(row.getValue("approval_date") as string)}</div>
+        <div className="font-medium">{formatDate(row.getValue("approval_date") as string)}</div>
       ),
     },
     {
@@ -283,6 +268,27 @@ export default function ApprovalHistory() {
             <span className={`h-2.5 w-2.5 rounded-full ${config.dotColor}`} />
             {config.text}
           </Button>
+        )
+      },
+    },
+    {
+      id: "detail",
+      header: () => <div className="font-semibold text-center">Detail</div>,
+      cell: ({ row }) => {
+        // eslint-disable-next-line react-hooks/rules-of-hooks
+        const router = useRouter()
+        return (
+          <div className="text-center">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => router.push(`/dashboard/approval-history/detail/${row.original.id}`)}
+              className="flex items-center gap-2"
+            >
+              <Eye className="h-4 w-4" />
+              View Detail
+            </Button>
+          </div>
         )
       },
     },

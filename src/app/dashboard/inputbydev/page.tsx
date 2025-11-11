@@ -15,6 +15,11 @@ function InputByDevContent() {
   const id = searchParams.get("id");
   const property = properties.find((p) => p.id === id);
 
+  // Hooks must be called unconditionally before any early returns.
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedData, setEditedData] = useState<Property>({
+    ...(property ?? ({} as Property)),
+  });
 
   if (!property)
     return (
@@ -25,9 +30,6 @@ function InputByDevContent() {
         </Button>
       </div>
     );
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedData, setEditedData] = useState<Property>({ ...property });
 
   const handleChange = (field: string, value: string | number) => {
     setEditedData((prev) => ({ ...prev, [field]: value }));
