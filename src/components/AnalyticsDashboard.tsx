@@ -112,11 +112,6 @@ export default function AnalyticsKpiRadial() {
   return (
     // NEW: bungkus dengan container tanpa padding kiri-kanan agar “Tahap” benar-benar nempel ke batas container
     <section className="w-full mx-auto max-w-7xl px-0 space-y-4">
-      {/* NEW: Judul seksi “Tahap” flush-left */}
-      <h2 className="text-sm font-semibold tracking-wide uppercase text-gray-500 dark:text-gray-400">
-        Tahap
-      </h2>
-
       {/* Toggle range */}
       <div className="flex justify-end">
         <div className="inline-flex border rounded-lg overflow-hidden bg-white/50 dark:bg-neutral-900">
