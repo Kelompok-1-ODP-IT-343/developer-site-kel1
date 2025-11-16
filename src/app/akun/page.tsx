@@ -40,7 +40,7 @@ import {
   OctagonAlert,
   BellDot
 } from "lucide-react";
-import { getUserProfile } from "@/lib/coreApi";
+import { getUserProfile, getUserNotifications } from "@/lib/coreApi";
 
 const COLORS = {
   teal: "#3FD8D4",
@@ -466,50 +466,54 @@ export default function AkunPage() {
 }
 
 function NotificationsContent() {
-  // Dummy data (selalu unread tiap render)
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: "Operation Successful",
-      desc: "Property has been successfully added to the listing.",
-      type: "success",
-      read: false,
-    },
-    {
-      id: 2,
-      title: "Operation Successful",
-      desc: "Customer approval process completed successfully.",
-      type: "success",
-      read: false,
-    },
-    {
-      id: 3,
-      title: "Proceed with Caution",
-      desc: "This action might have unintended consequences. Double-check your decision before proceeding.",
-      type: "warning",
-      read: false,
-    },
-    {
-      id: 4,
-      title: "Important Information",
-      desc: "Make sure to review the recent platform updates before submitting a new property.",
-      type: "info",
-      read: false,
-    },
-    {
-      id: 5,
-      title: "Something Went Wrong",
-      desc: "An error occurred while processing your request. Please try again later.",
-      type: "error",
-      read: false,
-    },
-  ]);
+  type UiNotif = { id: number; title: string; desc: string; type: "success" | "warning" | "info" | "error"; read: boolean; createdAt?: string };
+  const [notifications, setNotifications] = useState<UiNotif[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // hanya efek visual di runtime, tapi tidak disimpan
+  const classifyType = (title?: string, message?: string): UiNotif["type"] => {
+    const txt = `${title ?? ""} ${message ?? ""}`.toLowerCase();
+    if (txt.includes("gagal") || txt.includes("error")) return "error";
+    if (txt.includes("berhasil") || txt.includes("success")) return "success";
+    if (txt.includes("hati-hati") || txt.includes("warning")) return "warning";
+    return "info";
+  };
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const list = await getUserNotifications();
+        if (!alive) return;
+        const mapped: UiNotif[] = (Array.isArray(list) ? list : [])
+          .map((n) => ({
+            id: n.id,
+            title: n.title || n.notificationType || "Notification",
+            desc: n.message || "",
+            type: classifyType(n.title, n.message),
+            read: Boolean(n.readAt),
+            createdAt: n.createdAt,
+          }))
+          .sort((a, b) => (a.createdAt && b.createdAt ? (a.createdAt < b.createdAt ? 1 : -1) : 0));
+        setNotifications(mapped);
+      } catch (e: any) {
+        if (!alive) return;
+        setError(e?.response?.data?.message || "Gagal memuat notifikasi");
+        setNotifications([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // local mark-as-read (UI only)
   const handleClick = (id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
 
   const getStyle = (type: string) => {
@@ -564,17 +568,30 @@ function NotificationsContent() {
           variant="outline"
           size="sm"
           className="text-sm border-cyan-500 text-cyan-700 hover:bg-cyan-50 transition-colors"
-          onClick={() =>
-            setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-          }
+          onClick={() => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))}
         >
           Mark all as read
         </Button>
       </div>
 
-      {/* --- Notifications List --- */}
-      <div className="space-y-3">
-        {notifications.map((notif) => {
+      {/* --- Body --- */}
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-16 bg-gray-100 animate-pulse rounded-xl" />
+          ))}
+        </div>
+      ) : error ? (
+        <Alert variant="default" className="border-red-300 bg-red-50 text-red-700">
+          <AlertTitle className="font-semibold">Gagal memuat notifikasi</AlertTitle>
+          <AlertDescription className="text-sm">{error}</AlertDescription>
+        </Alert>
+      ) : (
+        <div className="space-y-3">
+          {notifications.length === 0 ? (
+            <div className="text-sm text-gray-500">Tidak ada notifikasi.</div>
+          ) : (
+            notifications.map((notif) => {
           const style = getStyle(notif.type);
           return (
             <div
@@ -602,8 +619,9 @@ function NotificationsContent() {
               )}
             </div>
           );
-        })}
-      </div>
+  }))}
+        </div>
+      )}
     </div>
   );
 }

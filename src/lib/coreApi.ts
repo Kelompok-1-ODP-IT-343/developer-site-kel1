@@ -1,9 +1,32 @@
 import axios, { AxiosHeaders } from "axios";
 
+// Resolve base URLs robustly across browser/SSR and support proxy targets when using relative base URLs
+const isBrowser = typeof window !== "undefined";
+const envCore = process.env.NEXT_PUBLIC_API_URL;
+const envCredit = process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL;
+
+function resolveBaseUrl(envUrl: string | undefined, fallbackRelative: string, fallbackProxyEnv: string | undefined, fallbackAbsolute: string) {
+  if (envUrl && envUrl.length > 0) {
+    if (isBrowser) return envUrl; // browser can use relative or absolute
+    // SSR: if env is relative (starts with '/'), use proxy target; else use as-is
+    if (envUrl.startsWith("/")) return fallbackProxyEnv || fallbackAbsolute;
+    return envUrl;
+  }
+  // No env provided
+  if (isBrowser) return fallbackRelative;
+  return fallbackProxyEnv || fallbackAbsolute;
+}
+
+const coreBaseURL = resolveBaseUrl(
+  envCore,
+  "/api/v1",
+  process.env.API_PROXY_TARGET_CORE,
+  "https://local-dev.satuatap.my.id/api/v1"
+);
+
 // Axios instance untuk seluruh request ke API Satu Atap
 const coreApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
-  // baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  baseURL: coreBaseURL,
   timeout: 150000,
   headers: {
     "Content-Type": "application/json",
@@ -12,7 +35,7 @@ const coreApi = axios.create({
 
 // Axios instance khusus untuk refresh token agar tidak terkena loop interceptor
 export const refreshClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:18080/api/v1",
+  baseURL: coreBaseURL,
   timeout: 150000,
   headers: {
     "Content-Type": "application/json",
@@ -20,8 +43,15 @@ export const refreshClient = axios.create({
 });
 
 // Axios instance untuk Credit Score API (Java service)
+const creditBaseURL = resolveBaseUrl(
+  envCredit,
+  "/credit-api",
+  process.env.API_PROXY_TARGET_CREDIT,
+  "https://local-dev.satuatap.my.id/api/v1"
+);
+
 const creditScoreApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL || "http://localhost:9009/api/v1",
+  baseURL: creditBaseURL,
   timeout: 10000,
   headers: {
     "Content-Type": "application/json",
@@ -452,6 +482,34 @@ export const getDeveloperDashboardStats = async (range?: string) => {
     return normalized;
   } catch (error) {
     console.error("Error fetching developer dashboard stats:", error);
+    throw error;
+  }
+};
+
+// Notifications - current user
+export type ApiNotification = {
+  id: number;
+  userId: number;
+  notificationType: string;
+  title: string;
+  message: string;
+  channel: string;
+  status: string;
+  scheduledAt?: string | null;
+  sentAt?: string | null;
+  deliveredAt?: string | null;
+  readAt?: string | null;
+  metadata?: any;
+  createdAt: string;
+};
+
+export const getUserNotifications = async (): Promise<ApiNotification[]> => {
+  try {
+    const response = await coreApi.get(`/notifications/user`);
+    const payload = response?.data?.data ?? response?.data ?? [];
+    return Array.isArray(payload) ? payload : [];
+  } catch (error) {
+    console.error("Error fetching user notifications:", error);
     throw error;
   }
 };

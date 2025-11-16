@@ -35,6 +35,37 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Environment configuration (switch remote/local easily)
+
+The app is configured to use a shared `.env` with sane defaults and per-developer overrides in `.env.local`.
+
+1) Defaults in `.env` (committed)
+
+```
+NEXT_PUBLIC_API_URL=/api/v1
+NEXT_PUBLIC_CREDIT_SCORE_API_URL=/credit-api
+API_PROXY_TARGET_CORE=https://local-dev.satuatap.my.id/api/v1
+API_PROXY_TARGET_CREDIT=https://local-dev.satuatap.my.id/api/v1
+```
+
+This makes the browser call `/api/v1` and `/credit-api` (same-origin). Next.js proxies them to the remote backend, avoiding CORS.
+
+2) Local overrides in `.env.local` (git-ignored)
+
+Uncomment to use localhost backends:
+
+```
+NEXT_PUBLIC_API_URL=/api/v1
+NEXT_PUBLIC_CREDIT_SCORE_API_URL=/credit-api
+API_PROXY_TARGET_CORE=http://localhost:18080/api/v1
+API_PROXY_TARGET_CREDIT=http://localhost:9009/api/v1
+```
+
+3) Apply changes
+
+- Restart dev server after editing env files.
+- If you set `NEXT_PUBLIC_API_URL` to an absolute external URL instead of a relative path, ensure your backend CORS allows `http://localhost:3000`. Using relative paths with the proxy is recommended to avoid CORS setup.
+
 ## Authentication and Refresh Tokens
 
 - The app expects the backend to return `token` (access token) and `refreshToken` on successful login/OTP verification.
