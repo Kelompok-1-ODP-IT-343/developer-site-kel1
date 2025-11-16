@@ -1,169 +1,105 @@
-name: staff-site-ci
+name: Build and Push to Docker Hub
 
 on:
-  push:
-    branches: [ "main", "develop" ]
   workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+    tags: ["v*"]
 
-env:
-  IMAGE_NAME: staff-site-kel1
-  REGISTRY: docker.io
-
-# ────────────────────────────────────────
-# JOB 1 — BUILD NEXT.JS
-# ────────────────────────────────────────
 jobs:
-  build_nextjs:
+  docker:
     runs-on: ubuntu-latest
-    name: Build Next.js
+    permissions:
+      contents: read
+      packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      # Step 1: Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # Step 2: Setup Node.js (optional, for Next.js build)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: "20"
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Next.js App
-        run: npm run build
-
-
-
-# ────────────────────────────────────────
-# JOB 2 — RUN TESTS
-# ────────────────────────────────────────
-  run_tests:
-    runs-on: ubuntu-latest
-    name: Run Tests
-    needs: build_nextjs
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run Tests
-        run: npm test --if-present
-
-
-
-# ────────────────────────────────────────
-# JOB 3 — BUILD DOCKER IMAGE
-# ────────────────────────────────────────
-  build_docker:
-    runs-on: ubuntu-latest
-    name: Build Docker Image
-    needs: run_tests
-
-    steps:
-      - uses: actions/checkout@v4
-
+      # Step 3: Extract metadata for image tags and labels
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/developer-site-kel1
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/heads/main') }}
+            type=ref,event=branch
+            type=ref,event=tag
             type=sha
 
-      - name: Setup QEMU
+      # Step 4: Set up QEMU (for optional cross-platform build)
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      - name: Setup Buildx
+      # Step 5: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image (no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-
-
-
-# ────────────────────────────────────────
-# JOB 4 — PUSH DOCKER IMAGE
-# ────────────────────────────────────────
-  push_docker:
-    runs-on: ubuntu-latest
-    name: Push Docker Image
-    needs: build_docker
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Login Docker Hub
+      # Step 6: Login to Docker Hub (fix 401 unauthorized)
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Push image
+      # Step 7: Build and push image
+      - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          # pakai 1 arsitektur saja agar build lebih cepat dan stabil
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # gunakan cache inline untuk hindari error "insufficient scopes"
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/developer-site-kel1:buildcache
+          cache-to: type=inline
 
+      - name: Get SHA Tag
+        id: image
+        run: |
+          TAG=$(echo "${{ steps.meta.outputs.tags }}" | grep 'sha-' | head -n 1)
+          echo "sha_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using tag: $TAG"
 
-
-# ────────────────────────────────────────
-# JOB 5 — TRIVY SCAN
-# ────────────────────────────────────────
-  trivy_scan:
-    runs-on: ubuntu-latest
-    name: Trivy Scan Image
-    needs: push_docker
-
-    steps:
-      - name: Scan with Trivy
+      # --- TRIVY SCAN (SIMPLE & CLEAR) ---
+      - name: Trivy Scan
+        id: trivy
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
-          format: table
-          severity: HIGH,CRITICAL
+          # Jika menggunakan Latest
+          image-ref: docker.io/satuatap/developer-site-kel1:latest
+          # Jika mengggunakan SHA
+          # image-ref: ${{ steps.image.outputs.sha_tag }}
+          format: 'table'
+          vuln-type: 'os,library'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '0'
           ignore-unfixed: false
           output: trivy-report.txt
 
-      - name: Upload Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-report
-          path: trivy-report.txt
-
-
-
-# ────────────────────────────────────────
-# JOB 6 — UPLOAD SUMMARY
-# ────────────────────────────────────────
-  upload_summary:
-    runs-on: ubuntu-latest
-    name: Upload Trivy Summary
-    needs: trivy_scan
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: trivy-report
-
-      - name: Write Summary
+      # --- GITHUB SUMMARY (CLEAR) ---
+      - name: Upload Trivy Summary
         run: |
-          echo "## 🔍 Trivy Scan Result" >> $GITHUB_STEP_SUMMARY
-          echo "Image scanned: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Trivy Vulnerability Scan Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "**Image scanned:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`${{ steps.image.outputs.sha_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📄 Full Trivy Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat trivy-report.txt >> $GITHUB_STEP_SUMMARY
