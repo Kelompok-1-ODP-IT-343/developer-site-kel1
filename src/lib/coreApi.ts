@@ -123,16 +123,12 @@ try {
 coreApi.interceptors.request.use((config) => {
   try {
     if (typeof window !== "undefined") {
-      const headers = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
       const token = getCookie("token");
       if (token) {
         const authHeader = `Bearer ${token}`;
-        if (config.headers instanceof AxiosHeaders) {
-          config.headers.set("Authorization", authHeader);
-        } else {
-          config.headers = new AxiosHeaders(config.headers as any);
-          config.headers.set("Authorization", authHeader);
-        }
+        const h = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
+        h.set("Authorization", authHeader);
+        config.headers = h;
       }
     }
   } catch (_) {
@@ -145,16 +141,12 @@ coreApi.interceptors.request.use((config) => {
 creditScoreApi.interceptors.request.use((config) => {
   try {
     if (typeof window !== "undefined") {
-      const headers = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
       const token = getCookie("token");
       if (token) {
         const authHeader = `Bearer ${token}`;
-        if (config.headers instanceof AxiosHeaders) {
-          config.headers.set("Authorization", authHeader);
-        } else {
-          config.headers = new AxiosHeaders(config.headers as any);
-          config.headers.set("Authorization", authHeader);
-        }
+        const h = config.headers instanceof AxiosHeaders ? config.headers : new AxiosHeaders(config.headers as any);
+        h.set("Authorization", authHeader);
+        config.headers = h;
       }
     }
   } catch (_) {}
@@ -163,9 +155,9 @@ creditScoreApi.interceptors.request.use((config) => {
 
 // Flag to prevent multiple refresh token requests
 let isRefreshing = false;
-let failedQueue: { resolve: Function; reject: Function }[] = [];
+let failedQueue: { resolve: (value: string | null) => void; reject: (reason?: unknown) => void }[] = [];
 
-const processQueue = (error: any, token: string | null = null) => {
+const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
@@ -375,7 +367,7 @@ export const getUserProfile = async () => {
     try {
       const resp = await coreApi.get(path);
       return normalize(resp?.data);
-    } catch (e) {
+    } catch (_e) {
       // try next
     }
   }

@@ -42,13 +42,6 @@ import {
 } from "lucide-react";
 import { getUserProfile, getUserNotifications, updateUserProfile } from "@/lib/coreApi";
 
-const COLORS = {
-  teal: "#3FD8D4",
-  gray: "#757575",
-  orange: "#FF8500",
-  lime: "#DDEE59",
-};
-
 interface UserProfile {
   id: number;
   username: string;
@@ -286,7 +279,7 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -347,7 +340,7 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
       console.log("[Profile Save] Sending payload", payload);
       const resp = await updateUserProfile(userProfile.id, payload);
       setMsg("Profile updated successfully.");
-      setLastSavedAt(Date.now());
+      // setLastSavedAt(Date.now());
       if (onSaved) onSaved(resp?.data ?? resp);
       // Optimistically keep normalized phone even if backend response is stale
       setForm((prev) => ({ ...prev, phone: normalizedPhone }));
@@ -545,7 +538,7 @@ function NotificationsContent() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [classifyType]);
 
   // local mark-as-read (UI only)
   const handleClick = (id: number) => {
@@ -738,15 +731,4 @@ function HelpContent() {
 
 
 
-/* Helpers */
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <label className="block">
-      <span className="block text-sm text-gray-500 mb-1">{label}</span>
-      <input
-        defaultValue={value}
-        className="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#3FD8D4]"
-      />
-    </label>
-  );
-}
+/* Helpers (removed unused Field component) */

@@ -93,7 +93,6 @@ function formatDate(dateString?: string | null) {
 // ========= Component =========
 export default function ApprovalTable() {
   const router = useRouter()
-  const [raw, setRaw] = React.useState<any[]>([])
   const [rows, setRows] = React.useState<UnifiedRow[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -107,7 +106,6 @@ export default function ApprovalTable() {
         const res = await getKPRApplicationsProgress()
         if (res?.success) {
           const list: any[] = Array.isArray(res.data) ? res.data : []
-          setRaw(list)
           // Filter to show only PENDING status applications
           const normalizedList = list.map(normalizeItem)
           const pendingOnly = normalizedList.filter((item) => {
@@ -138,14 +136,14 @@ export default function ApprovalTable() {
     })
   }, [rows, query])
 
-  const handleActionClick = (row: UnifiedRow) => {
+  const handleActionClick = React.useCallback((row: UnifiedRow) => {
     // Pick one route style; adjust if your detail route differs:
     // Option A: detail by id
     router.push(`/dashboard/detail/${row.id}`)
 
     // Option B (alternative): simulation page with query param
     // router.push(`/dashboard/simulate?id=${row.id}`)
-  }
+  }, [router])
 
   // === Columns (unified) ===
   const columns = React.useMemo<ColumnDef<UnifiedRow>[]>(
@@ -207,7 +205,7 @@ export default function ApprovalTable() {
         },
       },
     ],
-    []
+    [handleActionClick]
   )
 
   const table = useReactTable({

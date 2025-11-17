@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   CheckCircle2,
   XCircle,
-  Percent,
   Users,
   TrendingUp,
   TrendingDown,
@@ -48,7 +47,7 @@ export default function AnalyticsKpiRadial() {
     subtitle: string;
     value: number;
     trend: number;
-    icon: any;
+    icon: ComponentType<{ className?: string }>;
     color: string;
     unit: string;
   };
@@ -60,8 +59,11 @@ export default function AnalyticsKpiRadial() {
     try {
       const resp = await getStaffDashboard(selected);
       setData(resp);
-    } catch (err: any) {
-      const msg = err?.message || "Gagal memuat data KPI";
+    } catch (err: unknown) {
+      let msg = "Gagal memuat data KPI";
+      if (typeof err === "object" && err !== null && "message" in err) {
+        msg = String((err as { message?: string }).message || msg);
+      }
       setError(msg);
     } finally {
       setLoading(false);
@@ -70,12 +72,11 @@ export default function AnalyticsKpiRadial() {
 
   useEffect(() => {
     load(range);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 
   // Map API summary to KPI cards; support snake_case and camelCase
   const kpiData: KpiItem[] = useMemo(() => {
-    const s = data?.summary as any;
+    const s = data?.summary as StaffDashboardResponse["summary"] | undefined;
     const approved = s?.approved_count ?? s?.approvedCount ?? 0;
     const rejected = s?.rejected_count ?? s?.rejectedCount ?? 0;
     const pending = s?.pending_count ?? s?.pendingCount ?? 0;
@@ -166,6 +167,16 @@ export default function AnalyticsKpiRadial() {
   );
 }
 
+type KpiCardProps = {
+  title: string;
+  subtitle: string;
+  value: number;
+  trend: number;
+  icon: ComponentType<{ className?: string }>;
+  color: string;
+  unit: string;
+};
+
 function KpiCard({
   title,
   subtitle,
@@ -174,7 +185,7 @@ function KpiCard({
   icon: Icon,
   color,
   unit,
-}: any) {
+}: KpiCardProps) {
   const progress =
     unit === "%"
       ? value

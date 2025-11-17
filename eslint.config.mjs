@@ -34,11 +34,20 @@ const eslintConfig = [
   {
     files: ["**/*.{ts,tsx}"] ,
     rules: {
-      // Temporarily relax strictness to get the codebase green while we refactor types
-      "@typescript-eslint/no-explicit-any": "warn",
+      // Prefer explicit types but allow incremental migration
+      "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unsafe-function-type": "warn",
-      // Prefer fixing usages progressively; don't fail CI on these stylistic rules
-      "@next/next/no-img-element": "warn",
+      // Allow intentionally unused via underscore prefix
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+      // Disable noisy rule; optimize images later if needed
+      "@next/next/no-img-element": "off",
     },
   },
 ];

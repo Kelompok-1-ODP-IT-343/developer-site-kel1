@@ -59,9 +59,13 @@ export async function getStaffDashboard(
       throw new Error("Invalid dashboard response shape");
     }
     return payload as StaffDashboardResponse;
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Provide safe, contextual error without leaking sensitive info
-    const msg = err?.response?.data?.message || err?.message || "Failed to fetch staff dashboard";
+    let msg = "Failed to fetch staff dashboard";
+    if (typeof err === "object" && err !== null) {
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      msg = e.response?.data?.message || e.message || msg;
+    }
     throw new Error(`Dashboard fetch error: ${msg}`);
   }
 }

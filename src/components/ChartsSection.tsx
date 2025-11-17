@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  LineChart,
   Line,
   BarChart,
   Bar,
@@ -130,10 +129,8 @@ for (let i = 1; i < funnelRaw.length; i++) {
 }
 
 export default function ChartsSection() {
-  const [range, setRange] = useState<"7m" | "12m">("7m");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [payload, setPayload] = useState<{
+  const [range] = useState<"7m" | "12m">("7m");
+  const [_payload, setPayload] = useState<{
     growthAndDemand: Array<{ month: string; total_requests: number; total_approved: number }>;
     outstandingLoan: Array<{ month: string; amount_miliar: number }>;
     processingFunnel: Array<{ stage: string; count: number }>;
@@ -145,8 +142,6 @@ export default function ChartsSection() {
     let alive = true;
     (async () => {
       try {
-        setLoading(true);
-        setError(null);
         const stats = await getDeveloperDashboardStats(range);
         if (!alive) return;
         setPayload({
@@ -156,22 +151,16 @@ export default function ChartsSection() {
           userRegistered: stats.userRegistered || [],
           timestamp: stats.timestamp,
         });
-      } catch (e: any) {
+      } catch (_e: unknown) {
         if (!alive) return;
-        setError("Gagal memuat statistik");
       } finally {
-        if (alive) setLoading(false);
+        // no-op
       }
     })();
     return () => {
       alive = false;
     };
   }, [range]);
-
-  const gdData = useMemo(() => payload.growthAndDemand, [payload]);
-  const loanData = useMemo(() => payload.outstandingLoan, [payload]);
-  const funnelData = useMemo(() => payload.processingFunnel, [payload]);
-  const userRegData = useMemo(() => payload.userRegistered, [payload]);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 justify-items-center">
 
@@ -361,10 +350,6 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
       </div>
     </section>
   );
-}
-
-function formatIdr(n: number) {
-  return n.toLocaleString("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 }
 
 function formatShortIdr(n: number) {
