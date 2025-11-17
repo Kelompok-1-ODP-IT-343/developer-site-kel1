@@ -40,7 +40,7 @@ import {
   OctagonAlert,
   BellDot
 } from "lucide-react";
-import { getUserProfile, getUserNotifications } from "@/lib/coreApi";
+import { getUserProfile, getUserNotifications, updateUserProfile } from "@/lib/coreApi";
 
 const COLORS = {
   teal: "#3FD8D4",
@@ -134,7 +134,7 @@ function AkunContent() {
         <div className="max-w-7xl mx-auto flex justify-between items-center px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="relative w-9 h-9">
-              <Image src="/logo-satuatap.png" alt="Logo" fill className="object-contain" />
+              <Image src="/logo-satuatap.png" alt="Logo" fill sizes="36px" className="object-contain" />
             </div>
             <span className="font-extrabold text-xl text-[#FF8500]">satuatap</span>
           </div>
@@ -162,6 +162,7 @@ function AkunContent() {
                     src="/images/avatars/cecilion.png"
                     alt={loading ? "Loading..." : userProfile?.fullName || "User"}
                     fill
+                    sizes="48px"
                     className="object-cover"
                   />
                 </div>
@@ -219,6 +220,9 @@ function AkunContent() {
                   loading={loading} 
                   formatPhoneNumber={formatPhoneNumber}
                   formatCurrency={formatCurrency}
+                  onSaved={(u) => {
+                    try { setUserProfile((prev) => ({ ...(prev || {} as any), ...(u?.data ?? u) } as any)); } catch {}
+                  }}
                 />
               )}
               {active === "notifications" && <NotificationsContent />}
@@ -272,18 +276,96 @@ function SidebarItem({
 }
 
 /* Content */
-function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurrency }: { 
+function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurrency, onSaved }: { 
   userProfile: UserProfile | null; 
   loading: boolean;
   formatPhoneNumber: (phone: string) => string;
   formatCurrency: (amount: number) => string;
+  onSaved?: (updated: any) => void;
 }) {
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    username: "",
+    phone: "",
+    companyName: "",
+  });
+  // Keep a snapshot of the last known-saved profile values to restore on failure
+  const [savedSnapshot, setSavedSnapshot] = useState({
+    fullName: "",
+    email: "",
+    username: "",
+    phone: "",
+    companyName: "",
+  });
+
+  // Sync form with latest profile only when not in the middle of a save
+  useEffect(() => {
+    if (userProfile && !saving) {
+      const next = {
+        fullName: userProfile.fullName || "",
+        email: userProfile.email || "",
+        username: userProfile.username || "",
+        phone: userProfile.phone || "",
+        companyName: userProfile.companyName || "",
+      };
+      setForm(next);
+      setSavedSnapshot(next);
+    }
+  }, [userProfile, saving]);
+
+  const handleChange = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((prev) => ({ ...prev, [key]: e.target.value }))
+  };
+
+  const normalizePhone = (raw: string) => {
+    const trimmed = (raw || "").replace(/\s+/g, "");
+    if (trimmed.startsWith("+")) return trimmed;
+    if (trimmed.startsWith("08")) return "+62" + trimmed.substring(1);
+    if (trimmed.startsWith("0")) return "+62" + trimmed.substring(1);
+    return trimmed;
+  };
+
+  const handleSave = async () => {
+    if (!userProfile) return;
+    try {
+      setSaving(true);
+      setMsg(null);
+      setErr(null);
+      // Prepare payload strictly as expected by the API
+      const normalizedPhone = normalizePhone(form.phone);
+      const payload: Record<string, any> = {
+        fullName: form.fullName,
+        username: form.username,
+        phone: normalizedPhone,
+        companyName: form.companyName,
+      };
+      console.log("[Profile Save] Sending payload", payload);
+      const resp = await updateUserProfile(userProfile.id, payload);
+      setMsg("Profile updated successfully.");
+      setLastSavedAt(Date.now());
+      if (onSaved) onSaved(resp?.data ?? resp);
+      // Optimistically keep normalized phone even if backend response is stale
+      setForm((prev) => ({ ...prev, phone: normalizedPhone }));
+      setSavedSnapshot((prev) => ({ ...prev, phone: normalizedPhone }));
+      console.log("[Profile Save] Response", resp);
+    } catch (e: any) {
+      // Restore to last saved snapshot if update failed
+      setForm(savedSnapshot);
+      setErr(e?.response?.data?.message || "Failed to update profile. Restored previous data.");
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
     <div className="akun w-full">
       <Tabs defaultValue="account" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
+        <TabsList className="grid w-full grid-cols-1 mb-6">
           <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="password">Password</TabsTrigger>
         </TabsList>
 
         {/* --- Account Info --- */}
@@ -301,7 +383,8 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
                 <Label htmlFor="name">Full Name</Label>
                 <Input 
                   id="name" 
-                  defaultValue={loading ? "Loading..." : userProfile?.fullName || ""} 
+                  value={form.fullName}
+                  onChange={handleChange("fullName")}
                   disabled={loading}
                 />
               </div>
@@ -311,8 +394,9 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
                 <Input 
                   id="email" 
                   type="email" 
-                  defaultValue={loading ? "Loading..." : userProfile?.email || ""} 
-                  disabled={loading}
+                  value={form.email}
+                  onChange={() => {}}
+                  disabled
                 />
               </div>
 
@@ -320,7 +404,8 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
                 <Label htmlFor="username">Username</Label>
                 <Input 
                   id="username" 
-                  defaultValue={loading ? "Loading..." : userProfile?.username || ""} 
+                  value={form.username}
+                  onChange={handleChange("username")}
                   disabled={loading}
                 />
               </div>
@@ -329,91 +414,42 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
                 <Label htmlFor="phone">Phone Number</Label>
                 <Input 
                   id="phone" 
-                  defaultValue={loading ? "Loading..." : (userProfile?.phone ? formatPhoneNumber(userProfile.phone) : "")} 
+                  value={form.phone}
+                  onChange={handleChange("phone")}
+                  onBlur={() => setForm((prev) => ({ ...prev, phone: normalizePhone(prev.phone) }))}
                   disabled={loading}
                 />
               </div>
 
-              <div className="grid gap-3">
-                <Label htmlFor="position">Position</Label>
-                <Input 
-                  id="position" 
-                  defaultValue={loading ? "Loading..." : userProfile?.occupation || ""} 
-                  disabled={loading}
-                />
-              </div>
+              {/* Position removed as per new requirements */}
 
               <div className="grid gap-3">
                 <Label htmlFor="department">Company</Label>
                 <Input 
                   id="department" 
-                  defaultValue={loading ? "Loading..." : userProfile?.companyName || ""} 
+                  value={form.companyName}
+                  onChange={handleChange("companyName")}
                   disabled={loading}
                 />
               </div>
 
-              {userProfile?.monthlyIncome && (
-                <div className="grid gap-3">
-                  <Label htmlFor="income">Monthly Income</Label>
-                  <Input 
-                    id="income" 
-                    defaultValue={loading ? "Loading..." : formatCurrency(userProfile.monthlyIncome)} 
-                    disabled={loading}
-                  />
-                </div>
-              )}
+              {/* Monthly Income field removed as per new requirements */}
 
-              {userProfile?.nik && (
-                <div className="grid gap-3">
-                  <Label htmlFor="nik">NIK</Label>
-                  <Input 
-                    id="nik" 
-                    defaultValue={loading ? "Loading..." : userProfile.nik} 
-                    disabled={loading}
-                  />
-                </div>
-              )}
+              {/* NIK field removed as per new requirements */}
             </CardContent>
 
             <CardFooter>
-              <Button className="ml-auto bg-[#0B63E5] hover:bg-[#094ec1]" disabled={loading}>
-                Save Changes
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-
-        {/* --- Password Change --- */}
-        <TabsContent value="password">
-          <Card>
-            <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>
-                Update your password. After saving, you may need to log in again.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="grid gap-6">
-              <div className="grid gap-3">
-                <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" type="password" placeholder="••••••••" />
+              <div className="ml-auto flex flex-col gap-2 items-end w-full sm:w-auto">
+                {msg && (
+                  <div className="text-xs text-green-600">{msg}</div>
+                )}
+                {err && (
+                  <div className="text-xs text-red-600">{err}</div>
+                )}
+                <Button onClick={handleSave} className="bg-[#0B63E5] hover:bg-[#094ec1]" disabled={loading || saving}>
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
               </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" type="password" placeholder="••••••••" />
-              </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input id="confirmPassword" type="password" placeholder="••••••••" />
-              </div>
-            </CardContent>
-
-            <CardFooter>
-              <Button className="ml-auto bg-[#0B63E5] hover:bg-[#094ec1]">
-                Save Password
-              </Button>
             </CardFooter>
           </Card>
         </TabsContent>

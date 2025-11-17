@@ -42,8 +42,10 @@ The app is configured to use a shared `.env` with sane defaults and per-develope
 1) Defaults in `.env` (committed)
 
 ```
-NEXT_PUBLIC_API_URL=/api/v1
-NEXT_PUBLIC_CREDIT_SCORE_API_URL=/credit-api
+NEXT_PUBLIC_API_BASE_URL=http://localhost:18080
+# Legacy (optional if using base URL):
+# NEXT_PUBLIC_API_URL=/api/v1
+# NEXT_PUBLIC_CREDIT_SCORE_API_URL=/credit-api
 API_PROXY_TARGET_CORE=https://local-dev.satuatap.my.id/api/v1
 API_PROXY_TARGET_CREDIT=https://local-dev.satuatap.my.id/api/v1
 ```
@@ -55,6 +57,10 @@ This makes the browser call `/api/v1` and `/credit-api` (same-origin). Next.js p
 Uncomment to use localhost backends:
 
 ```
+# Preferred single host switch:
+NEXT_PUBLIC_API_BASE_URL=http://localhost:18080
+
+# Or legacy relative-path mode using the built-in proxy:
 NEXT_PUBLIC_API_URL=/api/v1
 NEXT_PUBLIC_CREDIT_SCORE_API_URL=/credit-api
 API_PROXY_TARGET_CORE=http://localhost:18080/api/v1
@@ -64,7 +70,8 @@ API_PROXY_TARGET_CREDIT=http://localhost:9009/api/v1
 3) Apply changes
 
 - Restart dev server after editing env files.
-- If you set `NEXT_PUBLIC_API_URL` to an absolute external URL instead of a relative path, ensure your backend CORS allows `http://localhost:3000`. Using relative paths with the proxy is recommended to avoid CORS setup.
+- If you use `NEXT_PUBLIC_API_BASE_URL`, the app calls `${BASE}/api/v1` and `${BASE}/credit-api` directly.
+- If you use legacy `NEXT_PUBLIC_API_URL` with an absolute URL, ensure your backend CORS allows `http://localhost:3000`. Relative paths with the proxy are recommended to avoid CORS setup.
 
 ## Authentication and Refresh Tokens
 
@@ -74,7 +81,7 @@ API_PROXY_TARGET_CREDIT=http://localhost:9009/api/v1
 - Refresh tokens are treated with a 24-hour lifetime on the client. We store a `refresh_expires_at` timestamp and stop refreshing after it elapses; users are redirected to `/login`.
 - Logout clears both tokens and the refresh metadata.
 
-Endpoints used (relative to `NEXT_PUBLIC_API_URL`):
+Endpoints used (relative to `/api/v1` under the configured base URL):
 
 - `POST /auth/login` or `POST /auth/verify-otp` to obtain tokens
 - `POST /auth/refresh` to refresh the access token

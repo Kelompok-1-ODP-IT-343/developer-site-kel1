@@ -1,9 +1,20 @@
 import axios, { AxiosHeaders } from "axios";
+import { decodeJWT } from "@/lib/jwtUtils";
 
 // Resolve base URLs robustly across browser/SSR and support proxy targets when using relative base URLs
 const isBrowser = typeof window !== "undefined";
+// New single base URL (preferred): e.g. http://localhost:18080
+const envBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+// Legacy envs (still supported as fallback)
 const envCore = process.env.NEXT_PUBLIC_API_URL;
 const envCredit = process.env.NEXT_PUBLIC_CREDIT_SCORE_API_URL;
+
+function joinUrl(base: string, path: string) {
+  if (!base) return path;
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${b}${p}`;
+}
 
 function resolveBaseUrl(envUrl: string | undefined, fallbackRelative: string, fallbackProxyEnv: string | undefined, fallbackAbsolute: string) {
   if (envUrl && envUrl.length > 0) {
@@ -17,12 +28,15 @@ function resolveBaseUrl(envUrl: string | undefined, fallbackRelative: string, fa
   return fallbackProxyEnv || fallbackAbsolute;
 }
 
-const coreBaseURL = resolveBaseUrl(
-  envCore,
-  "/api/v1",
-  process.env.API_PROXY_TARGET_CORE,
-  "https://local-dev.satuatap.my.id/api/v1"
-);
+// Prefer NEXT_PUBLIC_API_BASE_URL if provided; else fall back to legacy behavior
+const coreBaseURL = envBase && envBase.length > 0
+  ? joinUrl(envBase, "/api/v1")
+  : resolveBaseUrl(
+      envCore,
+      "/api/v1",
+      process.env.API_PROXY_TARGET_CORE,
+      "https://local-dev.satuatap.my.id/api/v1"
+    );
 
 // Axios instance untuk seluruh request ke API Satu Atap
 const coreApi = axios.create({
@@ -42,13 +56,23 @@ export const refreshClient = axios.create({
   },
 });
 
-// Axios instance untuk Credit Score API (Java service)
-const creditBaseURL = resolveBaseUrl(
-  envCredit,
-  "/credit-api",
-  process.env.API_PROXY_TARGET_CREDIT,
-  "https://local-dev.satuatap.my.id/api/v1"
-);
+// Kredit / Recommendation API
+// Prioritas penentuan base URL:
+// 1. Jika NEXT_PUBLIC_CREDIT_SCORE_API_URL di-set (absolute atau relative) -> gunakan itu
+// 2. Jika tidak ada dan core + credit digabung (envBase) -> gunakan coreBaseURL
+// 3. Jika tidak ada envBase (mode legacy relative) -> gunakan mekanisme resolveBaseUrl dengan fallback proxy
+const unifiedCredit = Boolean(envBase); // true bila menggunakan NEXT_PUBLIC_API_BASE_URL untuk core
+const creditBaseURL = (envCredit && envCredit.length > 0)
+  ? envCredit // dukung absolute: http://localhost:9009/api/v1
+  : (unifiedCredit
+      ? coreBaseURL
+      : resolveBaseUrl(
+          envCredit,
+          "/credit-api",
+          process.env.API_PROXY_TARGET_CREDIT,
+          "https://local-dev.satuatap.my.id/api/v1"
+        )
+    );
 
 const creditScoreApi = axios.create({
   baseURL: creditBaseURL,
@@ -324,11 +348,84 @@ export default coreApi;
 
 // User Profile API functions
 export const getUserProfile = async () => {
+  // Helper to normalize different backend response shapes to { success: true, data }
+  const normalize = (raw: any) => {
+    // If backend returns wrapper { success, data }
+    if (raw && typeof raw === "object" && ("data" in raw || "success" in raw)) {
+      const success = (raw.success === undefined) ? true : Boolean(raw.success);
+      const data = raw.data !== undefined ? raw.data : raw;
+      if (!success) {
+        const msg = raw?.message || "Failed to fetch profile";
+        throw new Error(msg);
+      }
+      return { success: true, data };
+    }
+    // If backend returns plain user object
+    return { success: true, data: raw };
+  };
+
+  // Try a list of possible endpoints in order
+  const tryPaths: string[] = [
+    "/user/profile",
+    "/users/profile",
+  ];
+
+  // First attempt: profile endpoints
+  for (const path of tryPaths) {
+    try {
+      const resp = await coreApi.get(path);
+      return normalize(resp?.data);
+    } catch (e) {
+      // try next
+    }
+  }
+
+  // Second attempt: by userId from JWT
   try {
-    const response = await coreApi.get("/user/profile");
-    return response.data;
+    const token = typeof document !== "undefined" ? getCookie("token") : null;
+    if (!token) throw new Error("No access token");
+    const payload = decodeJWT(token as string);
+    const userId = (payload as any)?.userId;
+    if (!userId) throw new Error("No userId in token");
+
+    const pathsById = [
+      `/user/${userId}`,
+      `/users/${userId}`,
+    ];
+    for (const path of pathsById) {
+      try {
+        const resp = await coreApi.get(path);
+        return normalize(resp?.data);
+      } catch (_) {
+        // try next id path
+      }
+    }
+
+    throw new Error("All profile endpoints failed");
+  } catch (finalErr) {
+    console.error("Error fetching user profile:", finalErr);
+    throw finalErr;
+  }
+};
+
+// Update user profile by ID. Always include status: "ACTIVE" unless explicitly provided.
+export const updateUserProfile = async (
+  userId: number,
+  data: Record<string, any>
+) => {
+  try {
+    const body = { status: "ACTIVE", ...data };
+    // Try primary path first
+    try {
+      const response = await coreApi.put(`/user/${userId}`, body);
+      return response.data;
+    } catch (_) {
+      // Fallback alternate path
+      const response = await coreApi.put(`/users/${userId}`, body);
+      return response.data;
+    }
   } catch (error) {
-    console.error("Error fetching user profile:", error);
+    console.error("Error updating user profile:", error);
     throw error;
   }
 };
@@ -384,9 +481,9 @@ export const rejectKPRApplication = async (applicationId: string, rejectionReaso
 
 export const getCreditScore = async (userId: string) => {
   try {
-    const response = await creditScoreApi.post(`/credit-score`, {
-      user_id: userId
-    });
+    // Jika unifiedCredit: endpoint langsung '/credit-score'; jika legacy: prefix '/credit-score' tetap ditambahkan di creditScoreApi base (/credit-api)
+    const path = `/credit-score`;
+    const response = await creditScoreApi.post(path, { user_id: userId });
     return response.data;
   } catch (error) {
     console.error("Error fetching credit score:", error);
@@ -413,7 +510,8 @@ export const getCreditRecommendation = async (applicationId: string) => {
       },
     };
 
-    const response = await creditScoreApi.post(`/recommendation-system`, requestBody);
+    const path = `/recommendation-system`;
+    const response = await creditScoreApi.post(path, requestBody);
     return response.data;
   } catch (error) {
     console.error("Error fetching credit recommendation:", error);
