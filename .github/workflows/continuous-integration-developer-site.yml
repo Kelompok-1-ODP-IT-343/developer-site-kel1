@@ -10,6 +10,7 @@ env:
   IMAGE_NAME: developer-site-kel1
 
 jobs:
+
   prepare_environment:
     name: Prepare Environment
     runs-on: ubuntu-latest
@@ -65,7 +66,7 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            maulanabn99/developer-site-kel1:${{ steps.sha.outputs.IMAGE_SHA }}
+            docker.io/maulanabn99/developer-site-kel1:${{ steps.sha.outputs.IMAGE_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -74,56 +75,51 @@ jobs:
     needs: build_and_push_image
     runs-on: ubuntu-latest
     steps:
-    - uses: aquasecurity/trivy-action@0.24.0
-      with:
-        image-ref: maulanabn99/developer-site-kel1:sha-2a01519
-        format: json
-        vuln-type: os,library
-        severity: CRITICAL
-        exit-code: 0
-        ignore-unfixed: false
-        output: trivy-report.json
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: maulanabn99/developer-site-kel1:sha-2a01519
+          format: json
+          vuln-type: os,library
+          severity: CRITICAL
+          exit-code: 0
+          ignore-unfixed: false
+          output: trivy-report.json
 
-    - run: |
-        echo "## Trivy Vulnerability Scan Report" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Image: maulanabn99/developer-site-kel1:sha-2a01519" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-
-        CRIT=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-report.json)
-
-        echo "- Critical: $CRIT" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-
-        echo "| Package | Installed | Fixed | CVE | Link |" >> $GITHUB_STEP_SUMMARY
-        echo "|---------|-----------|-------|-----|------|" >> $GITHUB_STEP_SUMMARY
-
-        jq -r '
-          .Results[].Vulnerabilities[]? |
-          "| \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "-") | \(.VulnerabilityID) | \(.PrimaryURL) |"
-        ' trivy-report.json >> $GITHUB_STEP_SUMMARY
+      - run: |
+          echo "## Trivy Vulnerability Scan Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Image: maulanabn99/developer-site-kel1:sha-2a01519" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          CRIT=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-report.json)
+          echo "- Critical: $CRIT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Package | Installed | Fixed | CVE | Link |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----------|-------|-----|------|" >> $GITHUB_STEP_SUMMARY
+          jq -r '
+            .Results[].Vulnerabilities[]? |
+            "| \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "-") | \(.VulnerabilityID) | \(.PrimaryURL) |"
+          ' trivy-report.json >> $GITHUB_STEP_SUMMARY
 
   gitops_update:
     name: GitOps Update
     needs: security_scan
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-      with:
-        repository: kelompok-1-odp-it-343/infra-management
-        token: ${{ secrets.ACCESS_TOKEN }}
-        path: infra-management
-        ref: main
+      - uses: actions/checkout@v4
+        with:
+          repository: kelompok-1-odp-it-343/infra-management
+          token: ${{ secrets.ACCESS_TOKEN }}
+          path: infra-management
+          ref: main
 
-    - run: |
-        cd infra-management/apps/developer-frontend
-        sed -i "s|image:.*developer-site-kel1.*|image: maulanabn99/developer-site-kel1:${{ needs.build_and_push_image.outputs.IMAGE_SHA }}|g" deployment.yaml
+      - run: |
+          cd infra-management/apps/developer-frontend
+          sed -i "s|image: docker.io/maulanabn99/developer-site-kel1:.*|image: docker.io/maulanabn99/developer-site-kel1:${{ needs.build_and_push_image.outputs.IMAGE_SHA }}|g" deployment.yaml
 
-    - run: |
-        cd infra-management
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add .
-        git commit -m "Update developer-site image to ${{ needs.build_and_push_image.outputs.IMAGE_SHA }}" || echo "No changes to commit"
-        git push origin main
-
+      - run: |
+          cd infra-management
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update developer-site image to ${{ needs.build_and_push_image.outputs.IMAGE_SHA }}" || echo "No changes to commit"
+          git push origin main
