@@ -117,7 +117,7 @@ jobs:
 
     - run: |
         cd infra-management/apps/developer-frontend
-        sed -i "s|image: .*/developer-site-kel1:.*|image: maulanabn99/developer-site-kel1:${{ needs.build_and_push_image.outputs.IMAGE_SHA }}|g" deployment.yaml
+        sed -i "s|image:.*developer-site-kel1:.*|image: maulanabn99/developer-site-kel1:${{ needs.build_and_push_image.outputs.IMAGE_SHA }}|g" deployment.yaml
 
     - run: |
         cd infra-management
