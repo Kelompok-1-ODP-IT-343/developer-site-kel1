@@ -81,7 +81,7 @@ jobs:
       - name: Run Trivy JSON Scan
         uses: aquasecurity/trivy-action@0.24.0
         with:
-          image-ref: maulanabn99/developer-site-kel1:latest
+          image-ref: maulanabn99/developer-site-kel1:sha-4dfd0c5
           format: json
           vuln-type: os,library
           severity: HIGH,CRITICAL
@@ -94,7 +94,7 @@ jobs:
           echo "## Trivy Vulnerability Scan Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          echo "Image scanned: \`maulanabn99/developer-site-kel1:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "Image scanned: \`maulanabn99/developer-site-kel1:sha-4dfd0c5\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           HIGH=$(jq '[.Results[].Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-report.json)
