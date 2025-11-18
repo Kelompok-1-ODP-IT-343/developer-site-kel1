@@ -18,23 +18,37 @@ export type DashboardSummary = {
 export type FunnelStatusItem = {
   stage: string;
   count: number;
+  // Some API variants use `name` / `value` instead
+  name?: string;
+  value?: number;
 };
 
 export type SlaBucketItem = {
   label: string; // e.g. "0-2 hari", "3-5 hari", ">5 hari"
   count: number;
+  // alternative keys seen in other responses
+  bucket?: string;
+  name?: string;
+  value?: number;
 };
 
 export type SubmissionApprovedItem = {
   month: string; // e.g. "Mar 25"
   submitted: number;
   approved: number;
+  // alternative keys
+  submittedCount?: number;
+  accepted?: number;
 };
 
 export type ValueIncomeItem = {
   month: string; // e.g. "Mar 25"
   submission_value: number;
   income: number;
+  // alternative keys
+  submissionValue?: number;
+  submissionAmount?: number;
+  obtainedAmount?: number;
 };
 
 export type StaffDashboardResponse = {
@@ -43,6 +57,11 @@ export type StaffDashboardResponse = {
   sla_bucket: SlaBucketItem[];
   submission_vs_approved: SubmissionApprovedItem[];
   value_vs_income: ValueIncomeItem[];
+  // camelCase variants sometimes returned by the API
+  funnelStatus?: FunnelStatusItem[];
+  slaBucket?: SlaBucketItem[];
+  submissionVsApproved?: SubmissionApprovedItem[];
+  valueVsIncome?: ValueIncomeItem[];
 };
 
 // Clean API wrapper: attach Authorization via interceptor; caller provides range enum
@@ -60,12 +79,10 @@ export async function getStaffDashboard(
     }
     return payload as StaffDashboardResponse;
   } catch (err: unknown) {
-    // Provide safe, contextual error without leaking sensitive info
-    let msg = "Failed to fetch staff dashboard";
-    if (typeof err === "object" && err !== null) {
-      const e = err as { response?: { data?: { message?: string } }; message?: string };
-      msg = e.response?.data?.message || e.message || msg;
-    }
+    const msg =
+      (err && typeof err === "object" && "response" in err && (err as any).response?.data?.message) ||
+      (err && typeof err === "object" && "message" in err && (err as any).message) ||
+      "Failed to fetch staff dashboard";
     throw new Error(`Dashboard fetch error: ${msg}`);
   }
 }
