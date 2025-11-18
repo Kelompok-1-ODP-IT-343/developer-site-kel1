@@ -100,26 +100,29 @@ jobs:
             "| \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "-") | \(.VulnerabilityID) | \(.PrimaryURL) |"
           ' trivy-report.json >> $GITHUB_STEP_SUMMARY
 
-  # gitops_update:
-  #   name: GitOps Update
-  #   needs: security_scan
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         repository: kelompok-1-odp-it-343/infra-management
-  #         token: ${{ secrets.ACCESS_TOKEN }}
-  #         path: infra-management
-  #         ref: main
+  gitops_update:
+    name: GitOps Update
+    needs: [build_and_push_image, security_scan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout infra-management repository
+        uses: actions/checkout@v4
+        with:
+          repository: kelompok-1-odp-it-343/infra-management
+          token: ${{ secrets.ACCESS_TOKEN }}
+          path: infra-management
+          ref: main
 
-  #     - run: |
-  #         cd infra-management/apps/developer-frontend
-  #         sed -i "s|image:.*developer-site-kel1.*|image: docker.io/maulanabn99/developer-site-kel1:${{ needs.build_and_push_image.outputs.IMAGE_SHA }}|g" deployment.yaml
+      - name: Update Developer Frontend image tag
+        run: |
+          cd infra-management/apps/developer-frontend
+          sed -i "s|image: maulanabn99/developer-site-kel1:.*|image: maulanabn99/developer-site-kel1:sha-${GITHUB_SHA::7}|g" deployment.yaml
 
-  #     - run: |
-  #         cd infra-management
-  #         git config user.name "github-actions[bot]"
-  #         git config user.email "github-actions[bot]@users.noreply.github.com"
-  #         git add .
-  #         git commit -m "Update developer-site image to ${{ needs.build_and_push_image.outputs.IMAGE_SHA }}" || echo "No changes to commit"
-  #         git push origin main
+      - name: Commit and Push Changes
+        run: |
+          cd infra-management
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Update developer-site image to sha-${GITHUB_SHA::7}"
+          git push origin main
