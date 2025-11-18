@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   CheckCircle2,
   XCircle,
   Users,
   TrendingUp,
   TrendingDown,
-  Hourglass
+  Hourglass,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -16,7 +16,8 @@ import {
   PolarRadiusAxis,
   Label,
 } from "recharts";
-import { getDeveloperDashboardStats } from "@/lib/coreApi";
+
+import { getStaffDashboard, type DashboardRange, type StaffDashboardResponse } from "@/services/dashboard";
 
 const COLORS = {
   teal: "#3FD8D4",
@@ -25,128 +26,156 @@ const COLORS = {
   red: "#ef4444",
   green: "#22c55e",
   ringBg: "#e5e7eb",
-  darkRingBg: "#1f293799",
+  darkRingBg: "#1f293799", // hitam keabu-abuan
 };
 
 const MAX_BORROWERS = 20000;
 
 export default function AnalyticsKpiRadial() {
-  const [range, setRange] = useState("7d");
-  const ranges = ["7d", "30d", "90d", "YTD"];
+  const UI_RANGES: { label: string; value: DashboardRange }[] = [
+    { label: "7d", value: "7d" },
+    { label: "30d", value: "30d" },
+    { label: "90d", value: "90d" },
+    { label: "YTD", value: "ytd" },
+  ];
+  const [range, setRange] = useState<DashboardRange>("30d");
+  const [data, setData] = useState<StaffDashboardResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   type KpiItem = {
     title: string;
     subtitle: string;
     value: number;
     trend: number;
-    icon: any;
+    icon: ComponentType<{ className?: string }>;
     color: string;
-    unit: string; // "" | "%" | "rb"
+    unit: string;
   };
-  const [kpiData, setKpiData] = useState<KpiItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // Fetch summary by range
+  const load = async (selected: DashboardRange) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await getStaffDashboard(selected);
+      setData(resp);
+    } catch (err: unknown) {
+      let msg = "Gagal memuat data KPI";
+      if (typeof err === "object" && err !== null && "message" in err) {
+        msg = String((err as { message?: string }).message || msg);
+      }
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const stats = await getDeveloperDashboardStats(range);
-        if (!alive) return;
-        const toNum = (v: any) => (typeof v === "number" && isFinite(v) ? v : 0);
-        const kpi = stats.kpi || {};
-        const next: KpiItem[] = [
-          {
-            title: "Approve",
-            subtitle: "Total Approved",
-            value: toNum(kpi?.approved?.value),
-            trend: toNum(kpi?.approved?.percentage_change),
-            icon: CheckCircle2,
-            color: COLORS.teal,
-            unit: "",
-          },
-          {
-            title: "Reject",
-            subtitle: "Total Rejected",
-            value: toNum(kpi?.rejected?.value),
-            trend: toNum(kpi?.rejected?.percentage_change),
-            icon: XCircle,
-            color: COLORS.orange,
-            unit: "",
-          },
-          {
-            title: "Pending",
-            subtitle: "Total Pending",
-            value: toNum(kpi?.pending?.value),
-            trend: toNum(kpi?.pending?.percentage_change),
-            icon: Hourglass,
-            color: COLORS.lime,
-            unit: "",
-          },
-          {
-            title: "Customers",
-            subtitle: "Nasabah Aktif",
-            value: toNum(kpi?.customers?.value),
-            trend: toNum(kpi?.customers?.percentage_change),
-            icon: Users,
-            color: COLORS.teal,
-            unit: "rb",
-          },
-        ];
-        setKpiData(next);
-      } catch (e: any) {
-        if (!alive) return;
-        setError("Gagal memuat KPI");
-        setKpiData([]);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    load(range);
   }, [range]);
 
+  // Map API summary to KPI cards; support snake_case and camelCase
+  const kpiData: KpiItem[] = useMemo(() => {
+    const s = data?.summary as StaffDashboardResponse["summary"] | undefined;
+    const approved = s?.approved_count ?? s?.approvedCount ?? 0;
+    const rejected = s?.rejected_count ?? s?.rejectedCount ?? 0;
+    const pending = s?.pending_count ?? s?.pendingCount ?? 0;
+    const customers = s?.active_customers ?? s?.activeCustomers ?? 0;
+    const growth = s?.growth || {};
+
+    return [
+      {
+        title: "Approve",
+        subtitle: "Total Approved",
+        value: approved,
+        trend: Number(growth?.approved ?? 0),
+        icon: CheckCircle2,
+        color: COLORS.teal,
+        unit: "",
+      },
+      {
+        title: "Reject",
+        subtitle: "Total Rejected",
+        value: rejected,
+        trend: Number(growth?.rejected ?? 0),
+        icon: XCircle,
+        color: COLORS.orange,
+        unit: "",
+      },
+      {
+        title: "Pending",
+        subtitle: "Total Pending",
+        value: pending,
+        trend: Number(growth?.pending ?? 0),
+        icon: Hourglass,
+        color: COLORS.lime,
+        unit: "",
+      },
+      {
+        title: "Customers",
+        subtitle: "Nasabah Aktif",
+        value: customers,
+        trend: Number(growth?.customers ?? 0),
+        icon: Users,
+        color: COLORS.teal,
+        unit: "rb",
+      },
+    ];
+  }, [data]);
 
   return (
-    // NEW: bungkus dengan container tanpa padding kiri-kanan agar “Tahap” benar-benar nempel ke batas container
-    <section className="w-full mx-auto max-w-7xl px-0 space-y-4">
-      {/* NEW: Judul seksi “Tahap” flush-left */}
-      <h2 className="text-sm font-semibold tracking-wide uppercase text-gray-500 dark:text-gray-400">
-        Tahap
-      </h2>
-
-      {/* Toggle range */}
+    <div className="space-y-6">
+      {/* Toggle range + refresh */}
       <div className="flex justify-end">
         <div className="inline-flex border rounded-lg overflow-hidden bg-white/50 dark:bg-neutral-900">
-          {ranges.map((r) => (
+          {UI_RANGES.map((r) => (
             <button
-              key={r}
-              onClick={() => setRange(r)}
+              key={r.label}
+              onClick={() => setRange(r.value)}
               className={`px-3 py-1 text-sm font-medium transition-colors ${
-                range === r
+                range === r.value
                   ? "bg-black text-white dark:bg-white dark:text-black"
                   : "text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white"
               }`}
             >
-              {r}
+              {r.label}
             </button>
           ))}
         </div>
+        <button
+          onClick={() => load(range)}
+          className="ml-2 px-3 py-1 text-sm font-medium rounded-lg border bg-white/50 dark:bg-neutral-900 hover:bg-white dark:hover:bg-neutral-800"
+        >
+          Refresh
+        </button>
       </div>
+
+      {error && (
+        <div className="text-sm text-red-600 dark:text-red-400">{error}</div>
+      )}
 
       {/* KPI cards grid */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {(loading && kpiData.length === 0) ? (
-          <div className="col-span-4 text-sm text-muted-foreground">Memuat KPI…</div>
-        ) : (
-          kpiData.map((item) => <KpiCard key={item.title} {...item} />)
-        )}
+        {kpiData.map((item) => (
+          <KpiCard key={item.title} {...item} />
+        ))}
       </section>
-    </section>
+      {loading && (
+        <div className="text-xs text-gray-500 dark:text-gray-400">Memuat KPI…</div>
+      )}
+    </div>
   );
 }
+
+type KpiCardProps = {
+  title: string;
+  subtitle: string;
+  value: number;
+  trend: number;
+  icon: ComponentType<{ className?: string }>;
+  color: string;
+  unit: string;
+};
 
 function KpiCard({
   title,
@@ -156,13 +185,13 @@ function KpiCard({
   icon: Icon,
   color,
   unit,
-}: any) {
+}: KpiCardProps) {
   const progress =
     unit === "%"
       ? value
       : unit === "rb"
-      ? Math.min((value / MAX_BORROWERS) * 100, 100)
-      : Math.min(value, 100); // jaga-jaga kalau value > 100
+        ? Math.min((value / MAX_BORROWERS) * 100, 100)
+        : value;
 
   const chartData = [
     { name: "progress", value: progress, fill: color },
@@ -170,17 +199,19 @@ function KpiCard({
   ];
 
   return (
-    <div className="relative bg-white dark:bg-neutral-950 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all duration-200 p-5 flex flex-col items-center">
+    <div className="relative bg-white dark:bg-neutral-950 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm hover:shadow-md transition-all duration-200 p-5 flex flex-col justify-between items-center">
       {/* Header */}
       <div className="flex w-full items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Icon className="h-5 w-5 text-gray-400 dark:text-gray-300" />
           <h3
-            className="font-medium text-gray-700 dark:text-white"
+            className="text-[12px] font-medium text-gray-600 dark:text-white"
             style={{
               fontFamily: "'Inter', sans-serif",
+              fontWeight: 500,
               fontSize: "20px",
               lineHeight: "1.2",
+              color: "var(--kpi-title-color)",
             }}
           >
             {title}
@@ -212,60 +243,62 @@ function KpiCard({
           <RadialBarChart
             cx="50%"
             cy="50%"
-            innerRadius="75%"
+            innerRadius="75%" // bisa dikurangi agar bagian dalam lebih kecil, mempertebal ring
             outerRadius="100%"
-            barSize={45}
+            barSize={45} // naikkan dari 15 jadi 30 agar ring lebih tebal
             data={chartData}
             startAngle={90}
             endAngle={-270}
           >
-            {/* background ring */}
-            <RadialBar dataKey="value" cornerRadius={15} fill={COLORS.darkRingBg} data={[{ value: 100 }]} />
-            {/* progress ring */}
-            <RadialBar dataKey="value" cornerRadius={15} fill={color} data={[{ value: progress }]} />
-
-            {/* NEW: tampilkan label judul KPI (mis. “Credit Analysis”) di atas angka */}
+            {/* Layer 1: background hitam */}
+            <RadialBar
+              dataKey="value"
+              cornerRadius={15}
+              fill={COLORS.darkRingBg}
+              data={[{ value: 100 }]}
+            />
+            {/* Layer 2: progress berwarna */}
+            <RadialBar
+              dataKey="value"
+              cornerRadius={15}
+              fill={color}
+              data={[{ value: progress }]}
+            />
             <PolarRadiusAxis tick={false} axisLine={false} stroke="none">
               <Label
                 content={({ viewBox }) => {
                   if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                    const { cx, cy } = viewBox as { cx: number; cy: number };
-
-                    const formatted =
-                      unit === "%"
-                        ? `${value}%`
-                        : unit === "rb"
-                        ? `${(value / 1000).toFixed(1)} rb`
-                        : value.toLocaleString("id-ID");
-
+                    const { cx, cy } = viewBox;
                     return (
-                      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
-                        {/* NEW: label atas (judul KPI) */}
-                        <tspan
+                      <>
+                        <text
                           x={cx}
-                          y={cy - 20}
-                          className="fill-gray-500 dark:fill-gray-400 text-[10px] tracking-wide uppercase"
+                          y={cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
                         >
-                          {title}
-                        </tspan>
-
-                        {/* angka utama */}
-                        <tspan x={cx} y={cy + 2} className="fill-black dark:fill-white text-3xl font-bold">
-                          {formatted}
-                        </tspan>
-
-                        {/* subjudul */}
-                        <tspan
-                          x={cx}
-                          y={cy + 22}
-                          className="fill-gray-500 dark:fill-gray-400 text-xs"
-                        >
-                          {subtitle}
-                        </tspan>
-                      </text>
+                          <tspan
+                            x={cx}
+                            y={cy}
+                            className="fill-black dark:fill-white text-3xl font-bold"
+                          >
+                            {unit === "%"
+                              ? `${value}%`
+                              : unit === "rb"
+                                ? `${(value / 1000).toFixed(1)} rb`
+                                : value.toLocaleString("id-ID")}
+                          </tspan>
+                          <tspan
+                            x={cx}
+                            y={(cy || 0) + 22}
+                            className="fill-gray-500 dark:fill-gray-400 text-xs"
+                          >
+                            {subtitle}
+                          </tspan>
+                        </text>
+                      </>
                     );
                   }
-                  return null;
                 }}
               />
             </PolarRadiusAxis>

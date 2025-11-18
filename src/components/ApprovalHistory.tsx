@@ -68,14 +68,6 @@ function formatDate(dateString: string) {
   })
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount)
-}
-
 export default function ApprovalHistory() {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [filter, setFilter] = React.useState("")
@@ -98,9 +90,14 @@ export default function ApprovalHistory() {
         } else {
           setError(response.data.message || 'Failed to fetch approval history')
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Error fetching approval history:', err)
-        setError(err.response?.data?.message || 'Failed to fetch approval history')
+        let msg = 'Failed to fetch approval history'
+        if (typeof err === 'object' && err !== null) {
+          const e = err as { response?: { data?: { message?: string } } }
+          msg = e.response?.data?.message || msg
+        }
+        setError(msg)
       } finally {
         setLoading(false)
       }

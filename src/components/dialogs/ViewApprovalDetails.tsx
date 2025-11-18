@@ -40,14 +40,6 @@ export default function ViewApprovalDetails({
     })
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount)
-  }
-
   // Function to get status configuration based on status value
   const getStatusConfig = (status: string) => {
     const normalizedStatus = status.toLowerCase()

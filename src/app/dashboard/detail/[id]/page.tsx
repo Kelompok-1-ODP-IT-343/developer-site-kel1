@@ -714,7 +714,9 @@ export default function ApprovalDetailIntegrated(): JSX.Element {
                   ['Tenor', (() => {
                     const lt = Number((application as any)?.loanTermYears);
                     if (!lt || Number.isNaN(lt)) return '-';
-                    return `${lt} bulan`;
+                    // loanTermYears is in years; show months consistently
+                    const months = lt > 50 ? lt : lt * 12;
+                    return `${months} bulan`;
                   })()],
                   ['Suku Bunga', (application as any)?.interestRate != null ? `${((application as any)?.interestRate as number) * 100}%` : '-'],
                   ['DP (Down Payment)', formatIDR((application as any)?.downPayment)],
@@ -1086,22 +1088,22 @@ function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail 
     birth_date: (d as any).birthDate ?? (ui as any).birthDate ?? '-',
     gender: d.gender ?? (ui as any).gender ?? '-',
     marital_status: (d as any).marital_status ?? (ui as any).maritalStatus ?? '-',
-    address: d.address ?? (ui as any).address ?? '-',
-    sub_district: (d as any).sub_district ?? '-',
-    district: (d as any).district ?? '-',
-    city: d.city ?? (ui as any).city ?? '-',
-    province: d.province ?? (ui as any).province ?? '-',
-    postal_code: (d as any).postal_code ?? (ui as any).postalCode ?? '-',
+  address: d.address ?? (ui as any).address ?? '-',
+  sub_district: (d as any).sub_district ?? (ui as any).subDistrict ?? '-',
+  district: (d as any).district ?? (ui as any).district ?? '-',
+  city: d.city ?? (ui as any).city ?? '-',
+  province: d.province ?? (ui as any).province ?? '-',
+  postal_code: (d as any).postal_code ?? (ui as any).postalCode ?? '-',
 
     occupation: d.occupation ?? (ui as any).occupation ?? '-',
     monthly_income: d.monthly_income ?? d.income ?? (ui as any).monthlyIncome ?? '-',
     company_name: d.company_name ?? (ui as any).companyName ?? '-',
-    company_address: (d as any).company_address ?? (ui as any).companyAddress ?? '-',
-    company_subdistrict: (d as any).company_subdistrict ?? '-',
-    company_district: (d as any).company_district ?? '-',
-    company_city: (d as any).company_city ?? '-',
-    company_province: (d as any).company_province ?? '-',
-    company_postal_code: (d as any).company_postal_code ?? '-',
+  company_address: (d as any).company_address ?? (ui as any).companyAddress ?? '-',
+  company_subdistrict: (d as any).company_subdistrict ?? (ui as any).companySubdistrict ?? '-',
+  company_district: (d as any).company_district ?? (ui as any).companyDistrict ?? '-',
+  company_city: (d as any).company_city ?? (ui as any).companyCity ?? '-',
+  company_province: (d as any).company_province ?? (ui as any).companyProvince ?? '-',
+  company_postal_code: (d as any).company_postal_code ?? (ui as any).companyPostalCode ?? '-',
 
     credit_status: (d as any).credit_status ?? 'Lancar',
     credit_score: (d as any).credit_score ?? '01',

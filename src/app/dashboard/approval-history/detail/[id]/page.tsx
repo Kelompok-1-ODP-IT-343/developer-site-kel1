@@ -4,8 +4,8 @@ import React, { useMemo, useState, useEffect, JSX } from 'react';
 import { useRouter, useSearchParams, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
-  Check, X, XCircle,
-  User2, Wallet, BarChart3, FileText, Eye, Settings2
+  XCircle,
+  User2, Wallet, FileText, Eye, Settings2
 } from 'lucide-react';
 import ViewDocumentDialog from '@/components/dialogs/ViewDocumentDialog';
 import ViewApprovalDetails from '@/components/dialogs/ViewApprovalDetails';
@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   getKPRApplicationDetail,
-  getCreditScore,
   approveKPRApplication,
   rejectKPRApplication
 } from '@/lib/coreApi';
@@ -160,8 +159,6 @@ export default function ApprovalHistoryDetailIntegrated(): JSX.Element {
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [score, setScore] = useState<number>(0);
-  const [scoreLoading, setScoreLoading] = useState(true);
   const [application, setApplication] = useState<any | null>(null);
   const [docViewer, setDocViewer] = useState<{ open: boolean; title: string; url: string | null }>({
     open: false,
@@ -215,9 +212,7 @@ export default function ApprovalHistoryDetailIntegrated(): JSX.Element {
         setCustomer(customerData);
         setApplication(payload as any);
 
-        if (customerData.id) {
-          fetchCreditScore(customerData.id);
-        }
+        // Credit score fetching removed as requested
       } catch (e: any) {
         setLoadError(e?.message || 'Gagal memuat data.');
         setCustomer(null);
@@ -229,22 +224,6 @@ export default function ApprovalHistoryDetailIntegrated(): JSX.Element {
       active = false;
     };
   }, [id]);
-
-  const fetchCreditScore = async (userId: string) => {
-    try {
-      setScoreLoading(true);
-      const data = await getCreditScore(userId);
-      if (data.success && data.score) {
-        setScore(Math.round(data.score));
-      } else {
-        setScore(650);
-      }
-    } catch {
-      setScore(650);
-    } finally {
-      setScoreLoading(false);
-    }
-  };
 
   // ----- KPR controls (local UI only) -----
   const loanAmount = 850_000_000; // Simplified for this view
@@ -352,7 +331,7 @@ export default function ApprovalHistoryDetailIntegrated(): JSX.Element {
       <main className="max-w-7xl mx-auto px-6 py-6 space-y-6">
 
         {/* ===== Summary Cards (rapi & seragam) ===== */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-4 auto-rows-fr">
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-fr">
           {/* Aplikasi */}
           <SummaryCard
             colors={colors}
@@ -409,55 +388,6 @@ export default function ApprovalHistoryDetailIntegrated(): JSX.Element {
                 return lt > 50 ? lt : lt * 12;
               })()} bulan
             </p>
-          </SummaryCard>
-
-          {/* FICO® Score */}
-          <SummaryCard
-            colors={colors}
-            icon={<BarChart3 className="h-7 w-7" color={colors.blue} />}
-            title="FICO® Score"
-          >
-            {scoreLoading ? (
-              <div className="text-sm text-muted-foreground">Loading score...</div>
-            ) : (
-              <div className="relative w-40 h-20">
-                <svg viewBox="0 0 100 50" className="w-full h-full">
-                  <path d="M10 50 A40 40 0 0 1 90 50" fill="none" stroke="#E5E7EB" strokeWidth="8" strokeLinecap="round" />
-                  <path
-                    d="M10 50 A40 40 0 0 1 90 50"
-                    fill="none"
-                    stroke={
-                      score <= 560 ? '#EF4444' :
-                      score <= 650 ? '#F97316' :
-                      score <= 700 ? '#EAB308' :
-                      score <= 750 ? '#3B82F6' : '#22C55E'
-                    }
-                    strokeWidth="8"
-                    strokeDasharray={`${((score - 300) / 550) * 126} 126`}
-                    strokeLinecap="round"
-                  />
-                  <text x="50" y="32" textAnchor="middle" fontSize="14" fontWeight="800" fill="#111827">{score}</text>
-                  <text
-                    x="50"
-                    y="44"
-                    textAnchor="middle"
-                    fontSize="7"
-                    fontWeight="600"
-                    fill={
-                      score <= 560 ? '#dc2626' :
-                      score <= 650 ? '#ea580c' :
-                      score <= 700 ? '#ca8a04' :
-                      score <= 750 ? '#2563eb' : '#16a34a'
-                    }
-                  >
-                    {score <= 560 ? 'Very Bad'
-                      : score <= 650 ? 'Bad'
-                      : score <= 700 ? 'Fair'
-                      : score <= 750 ? 'Good' : 'Excellent'}
-                  </text>
-                </svg>
-              </div>
-            )}
           </SummaryCard>
         </section>
 
@@ -599,7 +529,9 @@ export default function ApprovalHistoryDetailIntegrated(): JSX.Element {
                   ['Tenor', (() => {
                     const lt = Number((application as any)?.loanTermYears);
                     if (!lt || Number.isNaN(lt)) return '-';
-                    return `${lt} bulan`;
+                    // loanTermYears represents years; convert to months to keep consistent with other sections
+                    const months = lt > 50 ? lt : lt * 12;
+                    return `${months} bulan`;
                   })()],
                   ['Suku Bunga', (application as any)?.interestRate != null ? `${((application as any)?.interestRate as number) * 100}%` : '-'],
                   ['DP (Down Payment)', formatIDR((application as any)?.downPayment)],
@@ -875,8 +807,8 @@ function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail 
     gender: d.gender ?? (ui as any).gender ?? '-',
     marital_status: (d as any).marital_status ?? (ui as any).maritalStatus ?? '-',
     address: d.address ?? (ui as any).address ?? '-',
-    sub_district: (d as any).sub_district ?? '-',
-    district: (d as any).district ?? '-',
+  sub_district: (d as any).sub_district ?? (ui as any).subDistrict ?? '-',
+  district: (d as any).district ?? (ui as any).district ?? '-',
     city: d.city ?? (ui as any).city ?? '-',
     province: d.province ?? (ui as any).province ?? '-',
     postal_code: (d as any).postal_code ?? (ui as any).postalCode ?? '-',
@@ -884,12 +816,12 @@ function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail 
     occupation: d.occupation ?? (ui as any).occupation ?? '-',
     monthly_income: d.monthly_income ?? d.income ?? (ui as any).monthlyIncome ?? '-',
     company_name: d.company_name ?? (ui as any).companyName ?? '-',
-    company_address: (d as any).company_address ?? (ui as any).companyAddress ?? '-',
-    company_subdistrict: (d as any).company_subdistrict ?? '-',
-    company_district: (d as any).company_district ?? '-',
-    company_city: (d as any).company_city ?? '-',
-    company_province: (d as any).company_province ?? '-',
-    company_postal_code: (d as any).company_postal_code ?? '-',
+  company_address: (d as any).company_address ?? (ui as any).companyAddress ?? '-',
+  company_subdistrict: (d as any).company_subdistrict ?? (ui as any).companySubdistrict ?? '-',
+  company_district: (d as any).company_district ?? (ui as any).companyDistrict ?? '-',
+  company_city: (d as any).company_city ?? (ui as any).companyCity ?? '-',
+  company_province: (d as any).company_province ?? (ui as any).companyProvince ?? '-',
+  company_postal_code: (d as any).company_postal_code ?? (ui as any).companyPostalCode ?? '-',
 
     credit_status: (d as any).credit_status ?? 'Lancar',
     credit_score: (d as any).credit_score ?? '01',
