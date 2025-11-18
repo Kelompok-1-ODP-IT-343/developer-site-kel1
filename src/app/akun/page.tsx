@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/tabs"
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense, useCallback } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import {
   Settings,
@@ -211,8 +211,8 @@ function AkunContent() {
                 <SettingsContent 
                   userProfile={userProfile} 
                   loading={loading} 
-                  _formatPhoneNumber={formatPhoneNumber}
-                  _formatCurrency={formatCurrency}
+                  formatPhoneNumber={formatPhoneNumber}
+                  formatCurrency={formatCurrency}
                   onSaved={(u) => {
                     try { setUserProfile((prev) => ({ ...(prev || {} as any), ...(u?.data ?? u) } as any)); } catch {}
                   }}
@@ -269,11 +269,11 @@ function SidebarItem({
 }
 
 /* Content */
-function SettingsContent({ userProfile, loading, _formatPhoneNumber, _formatCurrency, onSaved }: { 
+function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurrency, onSaved }: { 
   userProfile: UserProfile | null; 
   loading: boolean;
-  _formatPhoneNumber: (phone: string) => string;
-  _formatCurrency: (amount: number) => string;
+  formatPhoneNumber: (phone: string) => string;
+  formatCurrency: (amount: number) => string;
   onSaved?: (updated: any) => void;
 }) {
   const [saving, setSaving] = useState(false);
@@ -500,13 +500,13 @@ function NotificationsContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const classifyType = useCallback((title?: string, message?: string): UiNotif["type"] => {
+  const classifyType = (title?: string, message?: string): UiNotif["type"] => {
     const txt = `${title ?? ""} ${message ?? ""}`.toLowerCase();
     if (txt.includes("gagal") || txt.includes("error")) return "error";
     if (txt.includes("berhasil") || txt.includes("success")) return "success";
     if (txt.includes("hati-hati") || txt.includes("warning")) return "warning";
     return "info";
-  }, []);
+  };
 
   useEffect(() => {
     let alive = true;

@@ -19,7 +19,7 @@ import {
   Area,
 } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { getStaffDashboard, type DashboardRange, type StaffDashboardResponse } from "@/services/dashboard";
+import { getDeveloperDashboardStats } from "@/lib/coreApi";
 
 // Color palette: use existing brand colors
 const COLORS = {
@@ -62,18 +62,18 @@ const FUNNEL_COLORS = [
 ];
 
 export default function ChartsSection() {
-  const ranges: DashboardRange[] = ["7d", "30d", "90d", "ytd"];
-  const [range, setRange] = useState<DashboardRange>("ytd");
-  const [data, setData] = useState<StaffDashboardResponse | null>(null);
+  const ranges = ["7m", "12m"] as const;
+  const [range, setRange] = useState<typeof ranges[number]>("7m");
+  const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async (selected: DashboardRange) => {
+  const load = async (selected: string) => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await getStaffDashboard(selected);
-      setData(resp);
+      const resp = await getDeveloperDashboardStats(selected as string);
+      setData(resp as any);
     } catch (err: unknown) {
       const msg = err && typeof err === "object" && "message" in err
         ? (err as { message?: string }).message
@@ -90,11 +90,11 @@ export default function ChartsSection() {
 
   const funnelRaw = useMemo(() => {
     // Support both snake_case and camelCase payloads from the API
-    const items = data?.funnel_status ?? data?.funnelStatus ?? [];
-    const out = items.map((it, idx) => ({
+    const items: any[] = data?.funnel_status ?? data?.funnelStatus ?? data?.processingFunnel ?? data?.processing_funnel ?? [];
+    const out = items.map((it: any, idx: number) => ({
       // some payloads use `stage`, others use `name`
       name: toMultilineStage((it.stage ?? it.name) ?? String(it)),
-      value: it.count ?? it.value ?? 0,
+      value: Number(it.count ?? it.value ?? 0),
       fill: FUNNEL_COLORS[idx] ?? COLORS.blueDark,
     }));
     for (let i = 1; i < out.length; i++) {
@@ -105,31 +105,33 @@ export default function ChartsSection() {
 
   const slaData = useMemo(() => {
     const items = data?.sla_bucket ?? data?.slaBucket ?? [];
-    return items.map((it) => {
+    const arr: any[] = Array.isArray(items) ? items : [];
+    return arr.map((it: any) => {
       const label = it.label ?? it.bucket ?? it.name ?? "";
       return {
         bucket: label,
-        value: it.count ?? it.value ?? 0,
+        value: Number(it.count ?? it.value ?? 0),
         fill: SLA_COLOR_BY_LABEL[normalizeSlaLabel(label)] ?? COLORS.gray,
       };
     });
   }, [data]);
 
   const submissionApproved = useMemo(() => {
-    const items = data?.submission_vs_approved ?? data?.submissionVsApproved ?? [];
-    return items.map((it) => ({
+    const items = data?.growthAndDemand ?? data?.growth_and_demand ?? [];
+    return (Array.isArray(items) ? items : []).map((it) => ({
       label: it.month,
-      submitted: it.submitted ?? it.submittedCount ?? 0,
-      accepted: it.approved ?? it.accepted ?? 0,
+      submitted: Number(it.total_requests ?? it.submitted ?? 0),
+      accepted: Number(it.total_approved ?? it.approved ?? 0),
     }));
   }, [data]);
 
   const valueIncome = useMemo(() => {
-    const items = data?.value_vs_income ?? data?.valueVsIncome ?? [];
-    return items.map((it) => ({
+    const items = data?.outstandingLoan ?? data?.outstanding_loan ?? [];
+    return (Array.isArray(items) ? items : []).map((it) => ({
       label: it.month,
-      appliedAmount: it.submission_value ?? it.submissionValue ?? it.submissionAmount ?? 0,
-      obtainedAmount: it.income ?? it.obtainedAmount ?? 0,
+      // amount_miliar: e.g. 0.8075 means 0.8075 miliar (billion) IDR
+      appliedAmount: Number(it.amount_miliar ?? 0) * 1_000_000_000,
+      obtainedAmount: Number(it.amount_miliar ?? 0) * 1_000_000_000,
     }));
   }, [data]);
 

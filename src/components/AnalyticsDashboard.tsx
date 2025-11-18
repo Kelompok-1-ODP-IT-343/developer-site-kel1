@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -17,7 +17,7 @@ import {
   Label,
 } from "recharts";
 
-import { getStaffDashboard, type DashboardRange, type StaffDashboardResponse } from "@/services/dashboard";
+import { getDeveloperDashboardStats } from "@/lib/coreApi";
 
 const COLORS = {
   teal: "#3FD8D4",
@@ -32,14 +32,12 @@ const COLORS = {
 const MAX_BORROWERS = 20000;
 
 export default function AnalyticsKpiRadial() {
-  const UI_RANGES: { label: string; value: DashboardRange }[] = [
-    { label: "7d", value: "7d" },
-    { label: "30d", value: "30d" },
-    { label: "90d", value: "90d" },
-    { label: "YTD", value: "ytd" },
+  const UI_RANGES = [
+    { label: "7m", value: "7m" },
+    { label: "12m", value: "12m" },
   ];
-  const [range, setRange] = useState<DashboardRange>("30d");
-  const [data, setData] = useState<StaffDashboardResponse | null>(null);
+  const [range, setRange] = useState<"7m" | "12m">("7m");
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   type KpiItem = {
@@ -47,20 +45,23 @@ export default function AnalyticsKpiRadial() {
     subtitle: string;
     value: number;
     trend: number;
-    icon: any;
+    icon: ComponentType<{ className?: string }>;
     color: string;
     unit: string;
   };
 
   // Fetch summary by range
-  const load = async (selected: DashboardRange) => {
+  const load = async (selected: "7m" | "12m") => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await getStaffDashboard(selected);
+      const resp = await getDeveloperDashboardStats(selected);
       setData(resp);
-    } catch (err: any) {
-      const msg = err?.message || "Gagal memuat data KPI";
+    } catch (err: unknown) {
+      let msg = "Gagal memuat data KPI";
+      if (typeof err === "object" && err !== null && "message" in err) {
+        msg = String((err as { message?: string }).message || msg);
+      }
       setError(msg);
     } finally {
       setLoading(false);
@@ -73,19 +74,13 @@ export default function AnalyticsKpiRadial() {
 
   // Map API summary to KPI cards; support snake_case and camelCase
   const kpiData: KpiItem[] = useMemo(() => {
-    const s = data?.summary as any;
-    const approved = s?.approved_count ?? s?.approvedCount ?? 0;
-    const rejected = s?.rejected_count ?? s?.rejectedCount ?? 0;
-    const pending = s?.pending_count ?? s?.pendingCount ?? 0;
-    const customers = s?.active_customers ?? s?.activeCustomers ?? 0;
-    const growth = s?.growth || {};
-
+    const s = data?.kpi ?? {};
     return [
       {
         title: "Approve",
         subtitle: "Total Approved",
-        value: approved,
-        trend: Number(growth?.approved ?? 0),
+        value: s?.approved?.value ?? 0,
+        trend: Number(s?.approved?.percentage_change ?? 0),
         icon: CheckCircle2,
         color: COLORS.teal,
         unit: "",
@@ -93,8 +88,8 @@ export default function AnalyticsKpiRadial() {
       {
         title: "Reject",
         subtitle: "Total Rejected",
-        value: rejected,
-        trend: Number(growth?.rejected ?? 0),
+        value: s?.rejected?.value ?? 0,
+        trend: Number(s?.rejected?.percentage_change ?? 0),
         icon: XCircle,
         color: COLORS.orange,
         unit: "",
@@ -102,8 +97,8 @@ export default function AnalyticsKpiRadial() {
       {
         title: "Pending",
         subtitle: "Total Pending",
-        value: pending,
-        trend: Number(growth?.pending ?? 0),
+        value: s?.pending?.value ?? 0,
+        trend: Number(s?.pending?.percentage_change ?? 0),
         icon: Hourglass,
         color: COLORS.lime,
         unit: "",
@@ -111,11 +106,10 @@ export default function AnalyticsKpiRadial() {
       {
         title: "Customers",
         subtitle: "Nasabah Aktif",
-        value: customers,
-        trend: Number(growth?.customers ?? 0),
+        value: s?.customers?.value ?? 0,
+        trend: Number(s?.customers?.percentage_change ?? 0),
         icon: Users,
         color: COLORS.teal,
-        // show raw unit (satuan) instead of thousands
         unit: "",
       },
     ];
@@ -129,7 +123,7 @@ export default function AnalyticsKpiRadial() {
           {UI_RANGES.map((r) => (
             <button
               key={r.label}
-              onClick={() => setRange(r.value)}
+              onClick={() => setRange(r.value as "7m" | "12m")}
               className={`px-3 py-1 text-sm font-medium transition-colors ${
                 range === r.value
                   ? "bg-black text-white dark:bg-white dark:text-black"
@@ -165,6 +159,16 @@ export default function AnalyticsKpiRadial() {
   );
 }
 
+type KpiCardProps = {
+  title: string;
+  subtitle: string;
+  value: number;
+  trend: number;
+  icon: ComponentType<{ className?: string }>;
+  color: string;
+  unit: string;
+};
+
 function KpiCard({
   title,
   subtitle,
@@ -173,7 +177,7 @@ function KpiCard({
   icon: Icon,
   color,
   unit,
-}: any) {
+}: KpiCardProps) {
   const progress =
     unit === "%"
       ? value
@@ -215,11 +219,11 @@ function KpiCard({
         >
           {trend >= 0 ? (
             <>
-              <TrendingUp className="h-3 w-3" /> {trend}%
+              <TrendingUp className="h-3 w-3" /> {Math.round(trend)}%
             </>
           ) : (
             <>
-              <TrendingDown className="h-3 w-3" /> {Math.abs(trend)}%
+              <TrendingDown className="h-3 w-3" /> {Math.round(Math.abs(trend))}%
             </>
           )}
         </div>
