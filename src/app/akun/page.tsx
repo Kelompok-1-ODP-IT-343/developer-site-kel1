@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/tabs"
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Image from "next/image";
 import {
   Settings,
@@ -500,13 +500,13 @@ function NotificationsContent() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const classifyType = (title?: string, message?: string): UiNotif["type"] => {
+  const classifyType = useCallback((title?: string, message?: string): UiNotif["type"] => {
     const txt = `${title ?? ""} ${message ?? ""}`.toLowerCase();
     if (txt.includes("gagal") || txt.includes("error")) return "error";
     if (txt.includes("berhasil") || txt.includes("success")) return "success";
     if (txt.includes("hati-hati") || txt.includes("warning")) return "warning";
     return "info";
-  };
+  }, []);
 
   useEffect(() => {
     let alive = true;
