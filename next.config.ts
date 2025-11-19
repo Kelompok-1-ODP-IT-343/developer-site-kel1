@@ -32,8 +32,8 @@ const nextConfig: NextConfig = {
     }
 
     // Fallback proxy targets for legacy relative-path mode
-    const core = process.env.API_PROXY_TARGET_CORE || "https://local-dev.satuatap.my.id/api/v1";
-    const credit = process.env.API_PROXY_TARGET_CREDIT || "https://local-dev.satuatap.my.id/api/v1";
+    const core = process.env.API_PROXY_TARGET_CORE || "https://satuatap.my.id/api/v1";
+    const credit = process.env.API_PROXY_TARGET_CREDIT || "https://ai.satuatap.my.id/api/v2";
     const stripTrailingSlash = (u: string) => (u.endsWith("/") ? u.slice(0, -1) : u);
     return [
       {
