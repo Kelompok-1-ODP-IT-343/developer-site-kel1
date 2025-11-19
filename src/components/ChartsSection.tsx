@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
 import {
+  // LineChart imported but not used
   Line,
   BarChart,
   Bar,
@@ -17,9 +19,7 @@ import {
   Area,
 } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { customers } from "@/components/data/history";
-import { properties } from "@/components/data/properties";
-import { getDeveloperDashboardStats } from "@/lib/coreApi";
+import { getStaffDashboard, type DashboardRange, type StaffDashboardResponse } from "@/services/dashboard";
 
 // Color palette: use existing brand colors
 const COLORS = {
@@ -35,137 +35,142 @@ const COLORS = {
 };
 
 // Helpers
-const monthNames = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "Mei",
-  "Jun",
-  "Jul",
-  "Agu",
-  "Sep",
-  "Okt",
-  "Nov",
-  "Des",
+
+// Removed unused helpers: getLastNMonths, monthKey, pseudoDaysFromId
+
+// Helpers to format API data into chart datasets
+function toMultilineStage(stage: string) {
+  // Convert "Property Appraisal" -> "Property\nAppraisal"
+  return stage.replace(/\s+/g, "\n");
+}
+
+function normalizeSlaLabel(label: string) {
+  return label.replace(/\s+/g, "").toLowerCase();
+}
+
+const SLA_COLOR_BY_LABEL: Record<string, string> = {
+  "0-2hari": COLORS.lime,
+  "3-5hari": COLORS.orange,
+  ">5hari": COLORS.slate,
+};
+
+const FUNNEL_COLORS = [
+  COLORS.blueLight,
+  COLORS.blueMid,
+  COLORS.blueDark,
+  COLORS.blueDeep,
 ];
-
-function getLastNMonths(n: number) {
-  const out: { key: string; label: string }[] = [];
-  const d = new Date();
-  for (let i = n - 1; i >= 0; i--) {
-    const dt = new Date(d.getFullYear(), d.getMonth() - i, 1);
-    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
-    out.push({ key, label: `${monthNames[dt.getMonth()]} ${String(dt.getFullYear()).slice(-2)}` });
-  }
-  return out;
-}
-
-function monthKey(dateStr: string) {
-  const d = new Date(dateStr);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function pseudoDaysFromId(id: string) {
-  // Deterministic 0-9 days bucket from id chars
-  const s = Array.from(id).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return s % 10; // 0..9
-}
-
-// Join helper
-const propertyById = new Map(properties.map((p) => [p.id, p]));
-
-// Build datasets
-const monthsWindow = getLastNMonths(12);
-
-const monthlyAgg = monthsWindow.map(({ key, label }) => {
-  const apps = customers.filter((c) => monthKey(c.approval_date) === key);
-  const submitted = apps.length; // using approval month as proxy for submission (mock data)
-  const accepted = apps.filter((a) => a.status === "approve").length;
-  const appliedAmount = apps.reduce((sum, a) => sum + (propertyById.get(a.property_id)?.price || 0), 0);
-  const obtainedAmount = apps
-    .filter((a) => a.status === "approve")
-    .reduce((sum, a) => sum + (propertyById.get(a.property_id)?.price || 0), 0);
-  return {
-    key,
-    label,
-    submitted,
-    accepted,
-    appliedAmount,
-    obtainedAmount,
-  };
-});
-
-// SLA buckets from approved customers
-const approved = customers.filter((c) => c.status === "approve");
-const slaBuckets = { "0–2": 0, "3–5": 0, ">5": 0 } as Record<string, number>;
-approved.forEach((c) => {
-  const days = pseudoDaysFromId(c.id);
-  if (days <= 2) slaBuckets["0–2"] += 1;
-  else if (days <= 5) slaBuckets["3–5"] += 1;
-  else slaBuckets[">5"] += 1;
-});
-const slaData = [
-  { bucket: "0–2 hari", value: slaBuckets["0–2"], fill: COLORS.lime },
-  { bucket: "3–5 hari", value: slaBuckets["3–5"], fill: COLORS.orange },
-  { bucket: ">5 hari", value: slaBuckets[">5"], fill: COLORS.slate },
-];
-
-// Funnel stages (monotonic decreasing, last equals approved count)
-const totalApps = customers.length;
-const approvedCount = approved.length;
-const stage1 = Math.max(approvedCount, totalApps);
-const stage2 = Math.max(approvedCount, Math.round(totalApps * 0.75));
-const stage3 = Math.max(approvedCount, Math.round(totalApps * 0.6));
-const funnelRaw = [
-  { name: "Property\nAppraisal", value: stage1, fill: COLORS.blueLight },
-  { name: "Credit\nAnalysis", value: stage2, fill: COLORS.blueMid },
-  { name: "Final\nApproval", value: stage3, fill: COLORS.blueDark },
-  { name: "Approved", value: approvedCount, fill: COLORS.blueDeep },
-];
-// Ensure non-increasing
-for (let i = 1; i < funnelRaw.length; i++) {
-  funnelRaw[i].value = Math.min(funnelRaw[i - 1].value, funnelRaw[i].value);
-}
 
 export default function ChartsSection() {
-  const [range] = useState<"7m" | "12m">("7m");
-  const [_payload, setPayload] = useState<{
-    growthAndDemand: Array<{ month: string; total_requests: number; total_approved: number }>;
-    outstandingLoan: Array<{ month: string; amount_miliar: number }>;
-    processingFunnel: Array<{ stage: string; count: number }>;
-    userRegistered: Array<{ month: string; count: number }>;
-    timestamp?: string;
-  }>({ growthAndDemand: [], outstandingLoan: [], processingFunnel: [], userRegistered: [], timestamp: undefined });
+  const ranges: DashboardRange[] = ["7d", "30d", "90d", "ytd"];
+  const [range, setRange] = useState<DashboardRange>("ytd");
+  const [data, setData] = useState<StaffDashboardResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async (selected: DashboardRange) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await getStaffDashboard(selected);
+      setData(resp);
+    } catch (err: unknown) {
+      const msg = err && typeof err === "object" && "message" in err
+        ? (err as { message?: string }).message
+        : undefined;
+      setError(msg ?? "Gagal memuat data dashboard");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const stats = await getDeveloperDashboardStats(range);
-        if (!alive) return;
-        setPayload({
-          growthAndDemand: stats.growthAndDemand || [],
-          outstandingLoan: stats.outstandingLoan || [],
-          processingFunnel: stats.processingFunnel || [],
-          userRegistered: stats.userRegistered || [],
-          timestamp: stats.timestamp,
-        });
-      } catch (_e: unknown) {
-        if (!alive) return;
-      } finally {
-        // no-op
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    load(range);
   }, [range]);
+
+  const funnelRaw = useMemo(() => {
+    // Support both snake_case and camelCase payloads from the API
+    const items = data?.funnel_status ?? data?.funnelStatus ?? [];
+    const out = items.map((it, idx) => ({
+      // some payloads use `stage`, others use `name`
+      name: toMultilineStage((it.stage ?? it.name) ?? String(it)),
+      value: it.count ?? it.value ?? 0,
+      fill: FUNNEL_COLORS[idx] ?? COLORS.blueDark,
+    }));
+    for (let i = 1; i < out.length; i++) {
+      out[i].value = Math.min(out[i - 1].value, out[i].value);
+    }
+    return out;
+  }, [data]);
+
+  const slaData = useMemo(() => {
+    const items = data?.sla_bucket ?? data?.slaBucket ?? [];
+    return items.map((it) => {
+      const label = it.label ?? it.bucket ?? it.name ?? "";
+      return {
+        bucket: label,
+        value: it.count ?? it.value ?? 0,
+        fill: SLA_COLOR_BY_LABEL[normalizeSlaLabel(label)] ?? COLORS.gray,
+      };
+    });
+  }, [data]);
+
+  const submissionApproved = useMemo(() => {
+    const items = data?.submission_vs_approved ?? data?.submissionVsApproved ?? [];
+    return items.map((it) => ({
+      label: it.month,
+      submitted: it.submitted ?? it.submittedCount ?? 0,
+      accepted: it.approved ?? it.accepted ?? 0,
+    }));
+  }, [data]);
+
+  const valueIncome = useMemo(() => {
+    const items = data?.value_vs_income ?? data?.valueVsIncome ?? [];
+    return items.map((it) => ({
+      label: it.month,
+      appliedAmount: it.submission_value ?? it.submissionValue ?? it.submissionAmount ?? 0,
+      obtainedAmount: it.income ?? it.obtainedAmount ?? 0,
+    }));
+  }, [data]);
+
+  const titleSuffix = range.toUpperCase();
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 justify-items-center">
+    <div className="space-y-4">
+      {/* Range selector + refresh */}
+      <div className="flex justify-end">
+        <div className="inline-flex border rounded-lg overflow-hidden bg-white/50 dark:bg-neutral-900">
+          {ranges.map((r) => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-3 py-1 text-sm font-medium transition-colors ${
+                range === r
+                  ? "bg-black text-white dark:bg-white dark:text-black"
+                  : "text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white"
+              }`}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => load(range)}
+          className="ml-2 px-3 py-1 text-sm font-medium rounded-lg border bg-white/50 dark:bg-neutral-900 hover:bg-white dark:hover:bg-neutral-800"
+          aria-label="Refresh data"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="text-sm text-red-600 dark:text-red-400">{error}</div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 justify-items-center">
 
       {/* 1) Funnel Status Aplikasi */}
-      <ChartCard title="Funnel Status Aplikasi (YTD)">
+      <ChartCard title={`Funnel Status Aplikasi (${titleSuffix})`} fullWidth>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={funnelRaw} layout="vertical" margin={{ top: 24, bottom: 12, left: 24, right: 24 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
@@ -179,8 +184,8 @@ export default function ChartsSection() {
             <YAxis
               type="category"
               dataKey="name"
-              interval={0}
-              tickMargin={4}
+              interval={0} 
+              tickMargin={4} 
               stroke={COLORS.gray}
               tick={<FunnelTick />}
               label={{ value: "Tahap", angle: -90, position: "left", offset: 12 }}
@@ -197,7 +202,7 @@ export default function ChartsSection() {
       </ChartCard>
 
       {/* 2) Aging & SLA Bucket (Approved) */}
-      <ChartCard title="Aging & SLA Bucket (Approved) (YTD)">
+      <ChartCard title={`Aging & SLA Bucket (Approved) (${titleSuffix})`} fullWidth>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={slaData} margin={{ top: 24, bottom: 12, left: 24, right: 24 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
@@ -205,7 +210,7 @@ export default function ChartsSection() {
               dataKey="bucket"
               stroke={COLORS.gray}
               tick={{ fontSize: 12 }}
-              padding={{ left: 0, right: 0 }}
+              padding={{ left: 0, right: 0 }}                  
               label={{ value: "Bucket SLA", position: "insideBottom", offset: -5 }}
             />
             <YAxis
@@ -217,7 +222,7 @@ export default function ChartsSection() {
                 value: "Jumlah Approved",
                 angle: -90,
                 position: "insideLeft", // ← otomatis di tengah
-                style: { textAnchor: "middle" },
+                style: { textAnchor: "middle" }, 
                 offset: 12
 
               }}
@@ -233,7 +238,7 @@ export default function ChartsSection() {
       </ChartCard>
 
       {/* 3) Pengajuan vs Diterima per Bulan (YTD) */}
-      <ChartCard title="Pengajuan vs Diterima per Bulan (YTD)">
+      <ChartCard title={`Pengajuan vs Diterima per Bulan (${titleSuffix})`} fullWidth>
         {(() => {
           const chartConfig: ChartConfig = {
             submitted: { label: "Diajukan", color: COLORS.blue },
@@ -241,9 +246,9 @@ export default function ChartsSection() {
           };
 
           return (
-            <ChartContainer config={chartConfig} className="h-[280px]">
+            <ChartContainer config={chartConfig} className="h-[280px] aspect-auto">
               <ComposedChart
-                data={monthlyAgg}
+                data={submissionApproved}
                 margin={{ top: 24, bottom: 12, left: 24, right: 24 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
@@ -281,7 +286,7 @@ export default function ChartsSection() {
       </ChartCard>
 
       {/* 4) Nilai Pengajuan vs Pendapatan per Bulan (Rp) (YTD) */}
-      <ChartCard title="Nilai Pengajuan vs Pendapatan per Bulan (Rp) (YTD)">
+      <ChartCard title={`Nilai Pengajuan vs Pendapatan per Bulan (Rp) (${titleSuffix})`} fullWidth>
         {(() => {
           const chartConfig: ChartConfig = {
             appliedAmount: { label: "Diajukan (Rp)", color: COLORS.blue },
@@ -289,9 +294,9 @@ export default function ChartsSection() {
           };
 
           return (
-            <ChartContainer config={chartConfig} className="h-[280px]">
+            <ChartContainer config={chartConfig} className="h-[280px] aspect-auto">
               <AreaChart
-                data={monthlyAgg}
+                data={valueIncome}
                 margin={{ top: 24, bottom: 12, left: 24, right: 24 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke={`${COLORS.gray}33`} />
@@ -311,6 +316,15 @@ export default function ChartsSection() {
                 />
                 <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="line" />} />
                 <Area
+                  dataKey="appliedAmount"
+                  type="monotone"
+                  fill="var(--color-appliedAmount)"
+                  fillOpacity={0.12}
+                  stroke="var(--color-appliedAmount)"
+                  strokeOpacity={0.6}
+                  strokeWidth={2}
+                />
+                <Area
                   dataKey="obtainedAmount"
                   type="monotone"
                   fill="var(--color-obtainedAmount)"
@@ -324,11 +338,15 @@ export default function ChartsSection() {
             );
         })()}
         </ChartCard>
+      </div>
+      {loading && (
+        <div className="text-xs text-gray-500 dark:text-gray-400">Memuat data…</div>
+      )}
     </div>
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartCard({ title, children, fullWidth = false }: { title: string; children: React.ReactNode; fullWidth?: boolean }) {
   return (
     <section className="w-full rounded-2xl border bg-white dark:bg-neutral-950 dark:border-neutral-800 shadow-sm">
       <div className="px-5 py-3 border-b dark:border-neutral-800">
@@ -346,11 +364,13 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
         </h3>
       </div>
       <div className="px-5 py-5 sm:px-6 sm:py-6">
-        <div className="mx-auto w-full max-w-[520px]">{children}</div>
+        <div className={fullWidth ? "mx-auto w-full" : "mx-auto w-full max-w-[520px]"}>{children}</div>
       </div>
     </section>
   );
 }
+
+// Removed unused helper `formatIdr` to avoid lint warnings
 
 function formatShortIdr(n: number) {
   // e.g. 1.2M, 850K in Indonesian style
