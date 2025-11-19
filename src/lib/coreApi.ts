@@ -35,7 +35,7 @@ const coreBaseURL = envBase && envBase.length > 0
       envCore,
       "/api/v1",
       process.env.API_PROXY_TARGET_CORE,
-      "https://local-dev.satuatap.my.id/api/v1"
+      "https://satuatap.my.id/api/v1"
     );
 
 // Axios instance untuk seluruh request ke API Satu Atap
@@ -70,7 +70,7 @@ const creditBaseURL = (envCredit && envCredit.length > 0)
           envCredit,
           "/credit-api",
           process.env.API_PROXY_TARGET_CREDIT,
-          "https://local-dev.satuatap.my.id/api/v1"
+          "https://ai.satuatap.my.id/api/v2"
         )
     );
 
