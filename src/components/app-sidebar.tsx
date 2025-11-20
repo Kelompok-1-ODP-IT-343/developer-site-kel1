@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import {
   Sidebar,
@@ -9,8 +9,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar, // ← untuk cek state collapsed/expanded
-} from "@/components/ui/sidebar"
+  useSidebar,
+} from "@/components/ui/sidebar";
 import {
   Home,
   CheckSquare,
@@ -20,10 +20,10 @@ import {
   HelpCircle,
   LogOut,
   Settings,
-  HardHat
-} from "lucide-react"
-import { useRouter } from "next/navigation"
-import Image from "next/image"
+  User,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -31,17 +31,17 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu"
-import { useState, useEffect } from "react"
-import { getUserProfile } from "@/lib/coreApi"
-import { logout } from "@/services/auth"
+} from "@/components/ui/dropdown-menu";
+import { useState, useEffect } from "react";
+import { getUserProfile } from "@/lib/coreApi";
+import { logout } from "@/services/auth";
 
-// Menu dengan ikon sesuai nama
+// Menu items
 const menuItems = [
   { name: "Home", icon: Home },
   { name: "Approval KPR", icon: CheckSquare },
-  { name: "Approval History", icon: ListTodo }
-]
+  { name: "Approval History", icon: ListTodo },
+];
 
 function getAvatarColor(name: string): string {
   const colors = [
@@ -77,49 +77,70 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) {
-  const router = useRouter()
+  const router = useRouter();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
 
-  // status collapsed/expanded dari shadcn sidebar
-  const { state } = useSidebar() // "expanded" | "collapsed"
-  const isCollapsed = state === "collapsed"
+
+  // Collapsed state from shadcn sidebar
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      const data = await getUserProfile();
-      setUser(data);
+    const fetchUserProfile = async () => {
+      try {
+        const response = await getUserProfile();
+        if (response.success) setUser(response.data);
+      } catch (err) {
+        console.error("Failed to fetch user profile", err);
+      } finally {
+        setLoading(false);
+      }
     };
-    fetchProfile();
+    fetchUserProfile();
   }, []);
+
+  // Build initials from full name, e.g., "Branch Managerooo" -> "BM"
+  const getInitials = (name: string) => {
+    const n = (name || "").trim();
+    if (!n) return "U";
+    const parts = n.split(/\s+/);
+    if (parts.length === 1) {
+      const p = parts[0];
+      return p.slice(0, 2).toUpperCase();
+    }
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const displayName = loading ? "" : userProfile?.fullName || "User";
+  const initials = getInitials(displayName);
 
   return (
     <Sidebar collapsible="icon">
-      {/* === HEADER LOGO === */}
+      {/* Header with dynamic logo */}
       <div className="flex flex-col items-center justify-center py-6">
         <Image
           src="/sidebar_satuatap.png"
           alt="Satu Atap"
           width={isCollapsed ? 28 : 140}
           height={isCollapsed ? 28 : 40}
-          className="object-contain"
+          className="object-contain transition-all duration-200"
           priority
         />
-
         {isCollapsed ? (
-          // Collapsed: hanya ikon helm (tooltip opsional via title)
-          <div className="mt-2" title="For Developer">
-            <HardHat className="h-5 w-5" aria-label="For Developer" />
+          <div className="mt-2" title="For Staff">
+            <User className="h-5 w-5" aria-label="For Staff" />
           </div>
         ) : (
-          // Expanded: ikon + teks besar
           <div className="mt-2 flex items-center gap-2 whitespace-nowrap">
-            <HardHat className="h-5 w-5" aria-hidden="true" />
-            <span className="text-xl font-bold tracking-wide">For Developer</span>
+            <User className="h-5 w-5" aria-hidden="true" />
+            <span className="text-xl font-bold tracking-wide">For Staff</span>
           </div>
         )}
       </div>
 
-      {/* === MENU === */}
+      {/* Menu */}
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
@@ -129,12 +150,11 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
                   <SidebarMenuButton asChild>
                     <button
                       onClick={() => onSelect(item.name)}
-                      className={`flex items-center gap-3 w-full px-4 py-2 rounded-lg transition-all duration-150
-                        ${
-                          activeMenu === item.name
-                            ? "bg-gray-200 text-gray-900 font-semibold shadow-sm scale-[1.02]"
-                            : "text-gray-600 hover:bg-gray-100 hover:scale-[1.01]"
-                        }`}
+                      className={`flex items-center gap-3 w-full px-4 py-2 rounded-lg transition-all duration-150 ${
+                        activeMenu === item.name
+                          ? "bg-gray-200 text-gray-900 font-semibold shadow-sm scale-[1.02]"
+                          : "text-gray-600 hover:bg-gray-100 hover:scale-[1.01]"
+                      }`}
                     >
                       <item.icon className="h-8 w-8" />
                       <span className="text-[16px]">{item.name}</span>
@@ -147,7 +167,8 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
         </SidebarGroup>
       </SidebarContent>
 
-      {/* === PROFILE DROPDOWN === */}
+      {/* Profile dropdown */}
+      {/* === FOOTER USER PROFILE & LOGOUT === */}
       <SidebarFooter className="pb-4">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -258,7 +279,22 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
 
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={onLogout}
+              onClick={async () => {
+                try {
+                  await logout();
+                } catch (err) {
+                  console.error('Logout failed', err);
+                }
+                if (typeof onLogout === 'function') {
+                  try {
+                    onLogout();
+                  } catch (e) {
+                    console.error('onLogout handler threw', e);
+                  }
+                } else {
+                  router.push('/login');
+                }
+              }}
               className="text-red-500 focus:text-red-500"
             >
               <LogOut className="mr-2 h-4 w-4" /> Log out
@@ -267,5 +303,5 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
         </DropdownMenu>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }
