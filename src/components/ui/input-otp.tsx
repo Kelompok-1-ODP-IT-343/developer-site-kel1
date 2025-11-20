@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 // Lightweight internal OTP input implementation to avoid external dependency
 type SlotInfo = { char?: string; isActive?: boolean; hasFakeCaret?: boolean };
 
-type OTPInputProps = React.ComponentPropsWithoutRef<"div"> & {
+type OTPInputProps = Omit<React.ComponentPropsWithoutRef<"div">, "onChange"> & {
   value?: string;
   onChange?: (value: string) => void;
   maxLength?: number;
