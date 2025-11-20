@@ -140,20 +140,20 @@ export default function ApprovalHistory() {
     {
       accessorKey: "application_id",
       header: () => <div className="font-semibold">ID Pengajuan</div>,
-      cell: ({ row }) => <div className="font-medium">{row.getValue("application_id")}</div>,
+      cell: ({ row }) => <div className="font-medium text-center px-4 py-2">{row.getValue("application_id")}</div>,
     },
     {
       accessorKey: "property_name",
       header: () => <div className="font-semibold">Nama Properti</div>,
-      cell: ({ row }) => <div>{row.getValue("property_name")}</div>,
+      cell: ({ row }) => <div className="text-center px-4 py-2">{row.getValue("property_name")}</div>,
     },
-    {
-      accessorKey: "approval_date",
-      header: () => <div className="font-semibold">Tanggal Pengajuan</div>,
-      cell: ({ row }) => (
-        <div className="font-medium">{formatDate(row.getValue("approval_date") as string)}</div>
-      ),
-    },
+  {
+    accessorKey: "approval_date",
+    header: () => <div className="font-semibold">Tanggal Pengajuan</div>,
+    cell: ({ row }) => (
+      <div className="font-medium text-center px-4 py-2">{formatDate(row.getValue("approval_date") as string)}</div>
+    ),
+  },
     {
       accessorKey: "status",
       header: () => <div className="font-semibold">Status</div>,
@@ -260,7 +260,7 @@ export default function ApprovalHistory() {
               setSelectedRow(row.original)
               setOpenDialog(true)
             }}
-            className={`flex items-center gap-2 px-3 py-1 rounded-md font-semibold shadow-sm ${config.bgColor} ${config.textColor}`}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-semibold shadow-sm mx-auto text-center transition ${config.bgColor} ${config.textColor} hover:brightness-105`}
           >
             <span className={`h-2.5 w-2.5 rounded-full ${config.dotColor}`} />
             {config.text}
@@ -280,7 +280,7 @@ export default function ApprovalHistory() {
               size="sm"
               variant="outline"
               onClick={() => router.push(`/dashboard/approval-history/detail/${row.original.id}`)}
-              className="flex items-center gap-2"
+              className="flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm mx-auto text-center transition hover:bg-muted/60"
             >
               <Eye className="h-4 w-4" />
               View Detail
@@ -347,7 +347,7 @@ export default function ApprovalHistory() {
           placeholder="Cari properti, kode aplikasi, atau alamat..."
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="max-w-sm"
+          className="max-w-sm text-left"
         />
       </div>
 
@@ -358,7 +358,10 @@ export default function ApprovalHistory() {
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="bg-muted/80">
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
+                  <TableHead
+                    key={header.id}
+                    className="text-center border-l first:border-l-0 border-gray-200"
+                  >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
@@ -371,7 +374,20 @@ export default function ApprovalHistory() {
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      className={
+                        (({
+                          no: "text-center",
+                          application_id: "text-center",
+                          property_name: "text-center",
+                          approval_date: "text-center",
+                          status: "text-center",
+                          detail: "text-center",
+                        } as Record<string, string>)[cell.column.id] ?? "text-center") +
+                        " border-l first:border-l-0 border-gray-200"
+                      }
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}

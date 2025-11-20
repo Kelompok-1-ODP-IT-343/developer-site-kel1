@@ -129,13 +129,13 @@ export function AppSidebar({ activeMenu, onSelect, onLogout }: AppSidebarProps) 
           priority
         />
         {isCollapsed ? (
-          <div className="mt-2" title="For Staff">
-            <User className="h-5 w-5" aria-label="For Staff" />
+          <div className="mt-2" title="For Developer">
+            <User className="h-5 w-5" aria-label="For Developer" />
           </div>
         ) : (
           <div className="mt-2 flex items-center gap-2 whitespace-nowrap">
             <User className="h-5 w-5" aria-hidden="true" />
-            <span className="text-xl font-bold tracking-wide">For Staff</span>
+            <span className="text-xl font-bold tracking-wide">For Developer</span>
           </div>
         )}
       </div>
