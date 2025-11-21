@@ -41,6 +41,7 @@ import {
   BellDot
 } from "lucide-react";
 import { getUserProfile, getUserNotifications, updateUserProfile } from "@/lib/coreApi";
+import { usePathname } from "next/navigation";
 
 interface UserProfile {
   id: number;
@@ -66,15 +67,58 @@ interface UserProfile {
   workExperience?: number;
 }
 
+const COLORS = {
+  teal: "#3FD8D4",
+  gray: "#757575",
+  orange: "#FF8500",
+  lime: "#DDEE59",
+};
 type Section = "settings" | "notifications" | "help";
+function getAvatarColor(name: string): string {
+  const colors = [
+    "#3FD8D4", // BNI teal
+    "#FF8500", // BNI orange
+    "#0B63E5", // BNI blue
+    "#DDEE59", // lime accent
+    "#6C63FF", // purple
+    "#00C49F", // emerald
+  ];
+  // Ambil warna berdasarkan kode unik nama
+  const index = name
+    .split("")
+    .reduce((sum, char) => sum + char.charCodeAt(0), 0) % colors.length;
+  return colors[index];
+}
 
 // Client component that uses search params
 function AkunContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [active, setActive] = useState<Section>("settings");
+  const [user, setUser] = useState<any>(null); 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(false);
+  const pathname = usePathname();
+  
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setLoading(true);
+        console.log("🟡 Fetching user profile...");
+        const resp = await getUserProfile();
+        const payload = (resp as any)?.data ?? resp;
+        console.log("✅ Response data:", payload);
+        setUser(payload);
+        setUserProfile(payload as unknown as UserProfile);
+      } catch (err) {
+        console.error("❌ Error saat ambil profil:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
 
   useEffect(() => {
     const tab = (searchParams.get("tab") || "").toLowerCase();
@@ -83,22 +127,7 @@ function AkunContent() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    const fetchUserProfile = async () => {
-      try {
-        const response = await getUserProfile();
-        if (response.success) {
-          setUserProfile(response.data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch user profile:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    fetchUserProfile();
-  }, []);
 
   const goLogout = () => router.push("/");
   const goBack = () => router.push("/dashboard");
@@ -150,23 +179,43 @@ function AkunContent() {
           <aside className="md:col-span-4 lg:col-span-3">
             <div className="rounded-2xl bg-white border shadow-sm overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-5 border-b">
-                <div className="relative w-12 h-12 rounded-full overflow-hidden">
-                  <Image
-                    src="/images/avatars/cecilion.png"
-                    alt={loading ? "Loading..." : userProfile?.fullName || "User"}
-                    fill
-                    sizes="48px"
-                    className="object-cover"
-                  />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 leading-tight">
-                    {loading ? "Loading..." : userProfile?.fullName || "User"}
-                  </h3>
-                  <p className="text-xs text-gray-500 -mt-0.5">
-                    {loading ? "Loading..." : userProfile?.roleName || "User"}
-                  </p>
-                </div>
+                  {/* Avatar */}
+                  <div className="relative w-12 h-12 rounded-full overflow-hidden flex items-center justify-center font-bold text-white uppercase select-none shadow-sm">
+                    {user?.imageUrl ? (
+                      <Image
+                        src={user.imageUrl}
+                        alt={user.fullName || "User profile picture"}
+                        fill
+                        className="object-cover rounded-full"
+                      />
+                    ) : (
+                      <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{
+                          backgroundColor: getAvatarColor(user?.fullName || user?.roleName || "Default"),
+                        }}
+                      >
+                        {(
+                          (user?.fullName || user?.name || user?.roleName || "U")
+                            .split(" ")
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((w: string) => w[0])
+                            .join("")
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* User Info */}
+                  <div className="flex flex-col">
+                    <h3 className="!text-sm !font-medium text-gray-900 leading-tight truncate max-w-[160px]">
+                      {user?.fullName || user?.name || "-"}
+                    </h3>
+                    <p className="!text-[10px] text-gray-500 truncate max-w-[160px]">
+                      {user?.email || "-"}
+                    </p>
+                  </div>
               </div>
 
               {/* Menu Items */}
@@ -214,7 +263,7 @@ function AkunContent() {
                   formatPhoneNumber={formatPhoneNumber}
                   formatCurrency={formatCurrency}
                   onSaved={(u) => {
-                    try { setUserProfile((prev) => ({ ...(prev || {} as any), ...(u?.data ?? u) } as any)); } catch {}
+                    try { setUserProfile((prev: UserProfile | null) => ({ ...(prev || ({} as any)), ...((u as any)?.data ?? u) } as any)); } catch {}
                   }}
                 />
               )}
