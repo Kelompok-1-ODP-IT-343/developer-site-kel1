@@ -39,7 +39,8 @@ export default function LoginPage() {
       try {
         const user = getCurrentUser();
         if (user && !cancelled) {
-          router.replace('/dashboard');
+          const target = user.role === 'DEVELOPER' ? '/dashboard' : '/akun';
+          router.replace(target);
           return;
         }
         // Jika token tidak valid tapi refreshToken masih ada, coba refresh diam-diam
@@ -47,7 +48,9 @@ export default function LoginPage() {
         if (rt) {
           const res = await refreshAccessToken();
           if (res.success && !cancelled) {
-            router.replace('/dashboard');
+            const refreshedUser = getCurrentUser();
+            const target = refreshedUser?.role === 'DEVELOPER' ? '/dashboard' : '/akun';
+            router.replace(target);
           }
         }
       } catch (_) {
@@ -81,7 +84,9 @@ export default function LoginPage() {
         setOtp('');
       } else {
         // Logged in without OTP (fallback behavior)
-        router.push('/dashboard');
+        const user = getCurrentUser();
+        const target = user?.role === 'DEVELOPER' ? '/dashboard' : '/akun';
+        router.push(target);
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -99,7 +104,7 @@ export default function LoginPage() {
     }
   };
 
-  
+
 
   React.useEffect(() => {
     const clean = otp.replace(/\D/g, '');

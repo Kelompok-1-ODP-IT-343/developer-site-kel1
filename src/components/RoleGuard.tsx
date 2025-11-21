@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { getCurrentUser, getRefreshToken } from '@/services/auth';
 
@@ -11,6 +11,7 @@ interface RoleGuardProps {
 
 export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     let cancelled = false;
@@ -32,22 +33,26 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
       }
 
       if (!user) {
-        router.push('/login');
+        const target = '/login';
+        if (pathname !== target) router.replace(target);
         return;
       }
 
       if (!allowedRoles.includes(user.role)) {
         // Redirect to appropriate page based on role
+        let target = '/login';
         switch (user.role) {
           case 'DEVELOPER':
-            router.push('/dashboard/inputbydev');
+            target = '/dashboard';
             break;
           case 'ADMIN':
-            router.push('/dashboard');
+            target = '/akun';
             break;
           default:
-            router.push('/login');
+            target = '/login';
         }
+        if (pathname !== target) router.replace(target);
+        return;
       }
     }
 
@@ -55,7 +60,7 @@ export default function RoleGuard({ children, allowedRoles }: RoleGuardProps) {
     return () => {
       cancelled = true;
     };
-  }, [allowedRoles, router]);
+  }, [allowedRoles, router, pathname]);
 
   return <>{children}</>;
 }
