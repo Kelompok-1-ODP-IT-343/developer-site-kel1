@@ -422,6 +422,17 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
 
             <CardContent className="grid gap-6 md:grid-cols-2">
               <div className="grid gap-3">
+                <Label htmlFor="username">Username</Label>
+                <Input 
+                  id="username" 
+                  value={form.username}
+                  // Username is not editable by users
+                  readOnly
+                  disabled
+                />
+              </div>
+
+              <div className="grid gap-3">
                 <Label htmlFor="name">Full Name</Label>
                 <Input 
                   id="name" 
@@ -439,16 +450,6 @@ function SettingsContent({ userProfile, loading, formatPhoneNumber, formatCurren
                   value={form.email}
                   onChange={() => {}}
                   disabled
-                />
-              </div>
-
-              <div className="grid gap-3">
-                <Label htmlFor="username">Username</Label>
-                <Input 
-                  id="username" 
-                  value={form.username}
-                  onChange={handleChange("username")}
-                  disabled={loading}
                 />
               </div>
 
