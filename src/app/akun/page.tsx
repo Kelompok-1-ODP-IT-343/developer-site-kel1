@@ -41,6 +41,7 @@ import {
   BellDot
 } from "lucide-react";
 import { getUserProfile, getUserNotifications, updateUserProfile } from "@/lib/coreApi";
+import { logout as apiLogout } from "@/services/auth";
 import { usePathname } from "next/navigation";
 
 interface UserProfile {
@@ -129,7 +130,16 @@ function AkunContent() {
 
 
 
-  const goLogout = () => router.push("/");
+  const goLogout = async () => {
+    try {
+      await apiLogout();
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      // ensure user is redirected to login page regardless
+      router.push("/login");
+    }
+  };
   const goBack = () => router.push("/dashboard");
 
   const formatCurrency = (amount: number) => {
