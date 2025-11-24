@@ -1,7 +1,7 @@
 "use client";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import Image from "next/image";
+ 
 import { FileDown } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -44,12 +44,13 @@ export default function ViewDocumentDialog({
 
             {imageUrl ? (
             <div className="p-4 flex justify-center bg-gray-50">
-                <Image
+                <img
                 src={imageUrl}
                 alt={title}
                 width={700}
                 height={500}
                 className="rounded-lg object-contain max-h-[75vh]"
+                loading="lazy"
                 />
             </div>
             ) : (
