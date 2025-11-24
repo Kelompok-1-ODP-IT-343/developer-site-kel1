@@ -1076,6 +1076,13 @@ function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail 
   const ktpDoc  = d.documents?.find(x => /KTP|IDENTITY/i.test(x.documentType ?? ''));
   const slipDoc = d.documents?.find(x => /SLIP|GAJI|INCOME/i.test(x.documentType ?? ''));
 
+  const sanitizeUrl = (u?: string | null) => {
+    if (!u) return null;
+    const trimmed = u.trim();
+    const withoutTicks = trimmed.replace(/^`+|`+$/g, "");
+    return withoutTicks || null;
+  };
+
   return {
     id: String((ui as any).userId ?? d.id ?? d.applicationId ?? id),
     name: d.applicantName ?? d.fullName ?? ui.fullName ?? 'Tidak Diketahui',
@@ -1108,8 +1115,8 @@ function mapToCustomerDetail(id: string, d: KPRApplicationData): CustomerDetail 
     credit_status: (d as any).credit_status ?? 'Lancar',
     credit_score: (d as any).credit_score ?? '01',
 
-    ktp: ktpDoc?.filePath ?? null,
-    slip: slipDoc?.filePath ?? null,
+    ktp: sanitizeUrl(ktpDoc?.filePath ?? null),
+    slip: sanitizeUrl(slipDoc?.filePath ?? null),
   };
 }
 
